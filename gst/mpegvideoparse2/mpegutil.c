@@ -252,7 +252,6 @@ mpeg_util_parse_sequence_hdr (MPEGSeqHdr * hdr, GstBuffer * buffer)
   } else
     memcpy (hdr->intra_quantizer_matrix, default_intra_quantizer_matrix, 64);
 
-  g_debug ("Här!!!");
   /* non intra quantizer matrix */
   if (!gst_bit_reader_get_bits_uint8 (&reader, &load_non_intra_flag, 1))
     return FALSE;
