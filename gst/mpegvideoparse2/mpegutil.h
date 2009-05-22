@@ -140,9 +140,6 @@ gboolean mpeg_util_parse_picture_gop (MPEGPictureGOP * gop, guint8 * data,
 gboolean mpeg_util_parse_quant_matrix (MPEGQuantMatrix * qm, guint8 * data,
     guint8 * end);
 
-guint8 *mpeg_util_find_start_code (guint32 * sync_word, guint8 * cur,
-    guint8 * end);
-
 guint32 read_bits (guint8 * buf, gint start_bit, gint n_bits);
 
 #endif

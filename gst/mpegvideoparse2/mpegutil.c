@@ -79,33 +79,6 @@ read_bits (guint8 * buf, gint start_bit, gint n_bits)
   return ret;
 }
 
-guint8 *
-mpeg_util_find_start_code (guint32 * sync_word, guint8 * cur, guint8 * end)
-{
-  guint32 code;
-
-  if (G_UNLIKELY (cur == NULL))
-    return NULL;
-
-  code = *sync_word;
-
-  while (cur < end) {
-    code <<= 8;
-
-    if (code == 0x00000100) {
-      /* Reset the sync word accumulator */
-      *sync_word = 0xffffffff;
-      return cur;
-    }
-
-    /* Add the next available byte to the collected sync word */
-    code |= *cur++;
-  }
-
-  *sync_word = code;
-  return NULL;
-}
-
 static void
 set_fps_from_code (MPEGSeqHdr * hdr, guint8 fps_code)
 {
