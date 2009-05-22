@@ -729,9 +729,8 @@ gst_base_video_parse_finish_frame (GstBaseVideoParse * base_video_parse)
   frame->presentation_timestamp =
       gst_base_video_parse_get_timestamp (base_video_parse,
       frame->presentation_frame_number);
-  frame->presentation_duration =
-      gst_base_video_parse_get_timestamp (base_video_parse,
-      frame->presentation_frame_number + 1) - frame->presentation_timestamp;
+  frame->presentation_duration = gst_util_uint64_scale (GST_SECOND,
+      base_video_parse->state.fps_n, base_video_parse->state.fps_d);
   frame->decode_timestamp =
       gst_base_video_parse_get_timestamp (base_video_parse,
       frame->decode_frame_number);
