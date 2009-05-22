@@ -669,19 +669,6 @@ gst_base_video_parse_set_state (GstBaseVideoParse * base_video_parse,
 
 }
 
-
-gboolean
-gst_base_video_parse_set_src_caps (GstBaseVideoParse * base_video_parse,
-    GstCaps * caps)
-{
-  g_return_val_if_fail (GST_IS_BASE_VIDEO_PARSE (base_video_parse), FALSE);
-
-  GST_DEBUG ("set_src_caps");
-
-  return gst_pad_set_caps (GST_BASE_VIDEO_CODEC_SRC_PAD (base_video_parse),
-      caps);
-}
-
 void
 gst_base_video_parse_lost_sync (GstBaseVideoParse * base_video_parse)
 {

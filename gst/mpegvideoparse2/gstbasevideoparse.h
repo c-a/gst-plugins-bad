@@ -120,8 +120,6 @@ void gst_base_video_parse_set_state (GstBaseVideoParse *parse,
 
 guint64 gst_base_video_parse_get_timestamp_offset (GstBaseVideoParse *parse);
 
-gboolean gst_base_video_parse_set_src_caps (GstBaseVideoParse *base_video_parse, GstCaps *caps);
-
 GstFlowReturn gst_base_video_parse_end_of_stream (GstBaseVideoParse *base_video_parse,
     GstBuffer *buffer);
 
