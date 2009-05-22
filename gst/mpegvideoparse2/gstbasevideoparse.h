@@ -80,13 +80,13 @@ struct _GstBaseVideoParse
 
   gboolean sink_clipping;
 
-  guint64 presentation_frame_number;
+  guint64 presentation_timestamp;
   guint64 system_frame_number;
 
   GstCaps *caps;
   gboolean set_output_caps;
 
-  GstClockTime last_timestamp;
+  GstClockTime input_buffer_timestamp;
 
   gint64 timestamp_offset;
 };

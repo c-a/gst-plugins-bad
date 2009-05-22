@@ -179,9 +179,6 @@ gst_mvp2_finish_frame (GstMpegVideoParse2 * mpegparse)
 {
   GstBaseVideoParse *parse = (GST_BASE_VIDEO_PARSE (mpegparse));
 
-  parse->current_frame->presentation_frame_number = mpegparse->frame_nr;
-  mpegparse->frame_nr++;
-
   mpegparse->prev_packet = 0;
   return gst_base_video_parse_finish_frame (parse);
 }
@@ -314,7 +311,6 @@ gst_mvp2_start (GstBaseVideoParse * parse)
 
   mpegparse->state = GST_MVP2_STATE_NEED_SEQUENCE;
   mpegparse->prev_packet = 0;
-  mpegparse->frame_nr = 0;
 
   mpegparse->version = 1;
   mpegparse->seq_header_buffer = NULL;
