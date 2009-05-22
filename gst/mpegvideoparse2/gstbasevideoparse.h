@@ -68,7 +68,7 @@ struct _GstBaseVideoParse
   GstAdapter *input_adapter;
   GstAdapter *output_adapter;
 
-  int reorder_depth;
+  gint reorder_depth;
 
   gboolean have_sync;
   gboolean discont;
@@ -76,7 +76,7 @@ struct _GstBaseVideoParse
 
   GstVideoFrame *current_frame;
   GstVideoState state;
-  int distance_from_sync;
+  gint distance_from_sync;
 
   gboolean sink_clipping;
 
@@ -98,12 +98,12 @@ struct _GstBaseVideoParseClass
   gboolean      (*start)               (GstBaseVideoParse *parse);
   gboolean      (*stop)                (GstBaseVideoParse *parse);
 
-  int           (*scan_for_sync)       (GstAdapter *adapter, gboolean at_eos,
-                                        int offset, int n);
+  gint           (*scan_for_sync)       (GstAdapter *adapter, gboolean at_eos,
+                                        gint offset, gint n);
   
   GstFlowReturn (*scan_for_packet_end) (GstBaseVideoParse *parse,
                                         GstAdapter *adapter, gboolean at_eos,
-                                        int *size);
+                                        gint *size);
   
   GstFlowReturn (*parse_data)          (GstBaseVideoParse *parse,
                                         GstBuffer *buffer);

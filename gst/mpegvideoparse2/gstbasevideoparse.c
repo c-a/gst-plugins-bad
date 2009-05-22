@@ -552,7 +552,7 @@ gst_base_video_parse_change_state (GstElement * element,
 
 static guint64
 gst_base_video_parse_get_timestamp (GstBaseVideoParse * base_video_parse,
-    int picture_number)
+    gint picture_number)
 {
   if (picture_number < 0) {
     return base_video_parse->timestamp_offset -
@@ -585,7 +585,7 @@ gst_base_video_parse_chain (GstPad * pad, GstBuffer * buf)
   GstBaseVideoParseClass *klass;
   GstBuffer *buffer;
   GstFlowReturn ret;
-  int next;
+  gint next;
 
   GST_DEBUG ("chain with %d bytes", GST_BUFFER_SIZE (buf));
 
@@ -607,7 +607,7 @@ gst_base_video_parse_chain (GstPad * pad, GstBuffer * buf)
   gst_adapter_push (base_video_parse->input_adapter, buf);
 
   if (!base_video_parse->have_sync) {
-    int n, m;
+    gint n, m;
 
     GST_DEBUG ("no sync, scanning");
 
