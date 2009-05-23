@@ -78,6 +78,9 @@ struct MPEGSeqExtHdr
   /* mpeg2 decoder level */
   guint8 level;
 
+  guint8 progressive;
+  guint8 chroma_format;
+  
   guint8 horiz_size_ext, vert_size_ext;
 
   guint8 fps_n_ext, fps_d_ext;

@@ -146,8 +146,12 @@ mpeg_util_parse_sequence_extension (MPEGSeqExtHdr * hdr, GstBuffer * buffer)
   if (!gst_bit_reader_get_bits_uint8 (&reader, &hdr->level, 4))
     return FALSE;
 
-  /* skip progressive_sequence and chroma_format */
-  if (!gst_bit_reader_skip (&reader, 3))
+  /* progressive */
+  if (!gst_bit_reader_get_bits_uint8 (&reader, &hdr->progressive, 1))
+    return FALSE;
+
+  /* chroma format */
+  if (!gst_bit_reader_get_bits_uint8 (&reader, &hdr->chroma_format, 2))
     return FALSE;
 
   /* resolution extension */
