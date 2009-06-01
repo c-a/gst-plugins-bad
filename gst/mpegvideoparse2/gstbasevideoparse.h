@@ -73,6 +73,7 @@ struct _GstBaseVideoParse
   gboolean have_sync;
   gboolean discont;
   gboolean started;
+  gboolean eos;
 
   GstVideoFrame *current_frame;
   GstVideoState state;
@@ -102,7 +103,7 @@ struct _GstBaseVideoParseClass
                                         gint offset, gint n);
   
   GstFlowReturn (*scan_for_packet_end) (GstBaseVideoParse *parse,
-                                        GstAdapter *adapter, gboolean at_eos,
+                                        GstAdapter *adapter,
                                         gint *size);
   
   GstFlowReturn (*parse_data)          (GstBaseVideoParse *parse,

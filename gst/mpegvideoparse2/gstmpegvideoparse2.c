@@ -59,6 +59,28 @@ GST_BOILERPLATE (GstMpegVideoParse2, gst_mvp2, GstBaseVideoParse,
 
 #define MVP2_HEADER_SIZE 4
 
+static GstCaps *
+gst_mvp2_get_caps (GstBaseVideoParse * parse)
+{
+  GstMpegVideoParse2 *mpegparse = GST_MPEG_VIDEO_PARSE2 (parse);
+  GstVideoState *state;
+  GstCaps *caps;
+
+  state = gst_base_video_parse_get_state (parse);
+  caps = gst_caps_new_simple ("video/mpeg",
+      "systemstream", G_TYPE_BOOLEAN, FALSE,
+      "parsed", G_TYPE_BOOLEAN, TRUE,
+      "mpegversion", G_TYPE_INT, mpegparse->version,
+      "width", G_TYPE_INT, state->width,
+      "height", G_TYPE_INT, state->height,
+      "framerate", GST_TYPE_FRACTION, state->fps_n, state->fps_d,
+      "pixel-aspect-ratio", GST_TYPE_FRACTION, state->par_n, state->par_d,
+      "interlaced", G_TYPE_BOOLEAN, mpegparse->interlaced,
+      "codec_data", GST_TYPE_BUFFER, mpegparse->seq_header_buffer, NULL);
+
+  return caps;
+}
+
 static gint
 gst_mvp2_scan_for_sync (GstAdapter * adapter, gboolean at_eos,
     gint offset, gint n)
@@ -81,7 +103,7 @@ gst_mvp2_scan_for_sync (GstAdapter * adapter, gboolean at_eos,
 
 static GstFlowReturn
 gst_mvp2_scan_for_packet_end (GstBaseVideoParse * parse, GstAdapter * adapter,
-    gboolean at_eos, gint * size)
+    gint * size)
 {
   gint n, next;
 
@@ -258,6 +280,7 @@ gst_mvp2_parse_data (GstBaseVideoParse * parse, GstBuffer * buffer)
       switch (ext_code) {
         case MPEG_PACKET_EXT_SEQUENCE:
         {
+          GST_DEBUG_OBJECT (mpegparse, "MPEG_PACKET_SEQUENCE_EXTENSION");
           if (!gst_mvp2_handle_sequence_extension (mpegparse, buffer))
             goto invalid_packet;
           break;
@@ -282,28 +305,6 @@ static GstFlowReturn
 gst_mvp2_shape_output (GstBaseVideoParse * parse, GstVideoFrame * frame)
 {
   return gst_base_video_parse_push (parse, frame->src_buffer);
-}
-
-static GstCaps *
-gst_mvp2_get_caps (GstBaseVideoParse * parse)
-{
-  GstMpegVideoParse2 *mpegparse = GST_MPEG_VIDEO_PARSE2 (parse);
-  GstVideoState *state;
-  GstCaps *caps;
-
-  state = gst_base_video_parse_get_state (parse);
-  caps = gst_caps_new_simple ("video/mpeg",
-      "systemstream", G_TYPE_BOOLEAN, FALSE,
-      "parsed", G_TYPE_BOOLEAN, TRUE,
-      "mpegversion", G_TYPE_INT, mpegparse->version,
-      "width", G_TYPE_INT, state->width,
-      "height", G_TYPE_INT, state->height,
-      "framerate", GST_TYPE_FRACTION, state->fps_n, state->fps_d,
-      "pixel-aspect-ratio", GST_TYPE_FRACTION, state->par_n, state->par_d,
-      "interlaced", G_TYPE_BOOLEAN, mpegparse->interlaced,
-      "codec_data", GST_TYPE_BUFFER, mpegparse->seq_header_buffer, NULL);
-
-  return caps;
 }
 
 static gboolean
