@@ -75,7 +75,7 @@ gst_mvp2_get_caps (GstBaseVideoParse * parse)
       "height", G_TYPE_INT, state->height,
       "framerate", GST_TYPE_FRACTION, state->fps_n, state->fps_d,
       "pixel-aspect-ratio", GST_TYPE_FRACTION, state->par_n, state->par_d,
-      "interlaced", G_TYPE_BOOLEAN, mpegparse->interlaced,
+      "interlaced", G_TYPE_BOOLEAN, state->interlaced,
       "codec_data", GST_TYPE_BUFFER, mpegparse->seq_header_buffer, NULL);
 
   return caps;
@@ -151,6 +151,7 @@ gst_mvp2_handle_sequence_extension (GstMpegVideoParse2 * mpegparse,
   state->width += (hdr.horiz_size_ext << 12);
   state->height += (hdr.vert_size_ext << 12);
 
+  state->interlaced = !hdr.progressive;
   gst_base_video_parse_set_state (parse, state);
 
   new_buffer = gst_buffer_merge (mpegparse->seq_header_buffer, buffer);
@@ -158,7 +159,6 @@ gst_mvp2_handle_sequence_extension (GstMpegVideoParse2 * mpegparse,
   mpegparse->seq_header_buffer = new_buffer;
 
   mpegparse->version = 2;
-  mpegparse->interlaced = !hdr.progressive;
 
   return TRUE;
 }
@@ -316,7 +316,6 @@ gst_mvp2_start (GstBaseVideoParse * parse)
   mpegparse->prev_packet = 0;
 
   mpegparse->version = 1;
-  mpegparse->interlaced = FALSE;
   mpegparse->seq_header_buffer = NULL;
 
   return TRUE;

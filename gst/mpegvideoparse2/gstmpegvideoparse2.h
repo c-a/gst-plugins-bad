@@ -51,7 +51,6 @@ struct _GstMpegVideoParse2 {
 
   GstBuffer *seq_header_buffer;
   gint version;
-  gboolean interlaced;
 };
 
 struct _GstMpegVideoParse2Class {
