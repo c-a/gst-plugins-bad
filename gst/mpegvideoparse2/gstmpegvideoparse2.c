@@ -230,6 +230,9 @@ gst_mvp2_parse_data (GstBaseVideoParse * parse, GstBuffer * buffer)
       GST_DEBUG_OBJECT (mpegparse, "Drop data since we haven't found a "
           "MPEG_PACKET_SEQUENCE yet");
       goto invalid_packet;
+    } else {
+      if (!gst_mvp2_handle_sequence (mpegparse, buffer))
+        goto invalid_packet;
     }
   }
 
@@ -241,8 +244,6 @@ gst_mvp2_parse_data (GstBaseVideoParse * parse, GstBuffer * buffer)
       if (mpegparse->state != GST_MVP2_STATE_NEED_SEQUENCE)
         gst_base_video_parse_finish_frame (parse);
 
-      if (!gst_mvp2_handle_sequence (mpegparse, buffer))
-        goto invalid_packet;
       break;
     }
     case MPEG_PACKET_GOP:
