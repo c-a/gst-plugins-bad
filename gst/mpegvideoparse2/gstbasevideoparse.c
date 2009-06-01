@@ -62,7 +62,7 @@ gst_base_video_parse_drain (GstBaseVideoParse * base_video_parse,
     "Video Parse Base Class");
 
 GST_BOILERPLATE_FULL (GstBaseVideoParse, gst_base_video_parse,
-    GstBaseVideoCodec, GST_TYPE_BASE_VIDEO_CODEC, _do_init);
+    GstElement, GST_TYPE_ELEMENT, _do_init);
 
 static void
 gst_base_video_parse_base_init (gpointer g_class)
@@ -88,16 +88,34 @@ static void
 gst_base_video_parse_init (GstBaseVideoParse * base_video_parse,
     GstBaseVideoParseClass * klass)
 {
+  GstPadTemplate *pad_template;
   GstPad *pad;
 
   GST_DEBUG ("gst_base_video_parse_init");
 
-  pad = GST_BASE_VIDEO_CODEC_SINK_PAD (base_video_parse);
+  pad_template =
+      gst_element_class_get_pad_template (GST_ELEMENT_CLASS (klass), "sink");
+  g_return_if_fail (pad_template != NULL);
+
+  base_video_parse->sinkpad = gst_pad_new_from_template (pad_template, "sink");
+  gst_element_add_pad (GST_ELEMENT (base_video_parse),
+      base_video_parse->sinkpad);
+
+  pad_template =
+      gst_element_class_get_pad_template (GST_ELEMENT_CLASS (klass), "src");
+  g_return_if_fail (pad_template != NULL);
+
+  base_video_parse->srcpad = gst_pad_new_from_template (pad_template, "src");
+  gst_element_add_pad (GST_ELEMENT (base_video_parse),
+      base_video_parse->srcpad);
+
+
+  pad = GST_BASE_VIDEO_PARSE_SINK_PAD (base_video_parse);
 
   gst_pad_set_chain_function (pad, gst_base_video_parse_chain);
   gst_pad_set_event_function (pad, gst_base_video_parse_sink_event);
 
-  pad = GST_BASE_VIDEO_CODEC_SRC_PAD (base_video_parse);
+  pad = GST_BASE_VIDEO_PARSE_SRC_PAD (base_video_parse);
 
   gst_pad_set_query_type_function (pad, gst_base_video_parse_get_query_types);
   gst_pad_set_query_function (pad, gst_base_video_parse_src_query);
@@ -256,7 +274,7 @@ gst_base_video_parse_src_query (GstPad * pad, GstQuery * query)
 
       /* see if upstream can handle it */
       gst_query_ref (query);
-      res = gst_pad_query (GST_BASE_VIDEO_CODEC_SINK_PAD (base_parse), query);
+      res = gst_pad_query (GST_BASE_VIDEO_PARSE_SINK_PAD (base_parse), query);
       if (res)
         goto done;
 
@@ -281,7 +299,7 @@ gst_base_video_parse_src_query (GstPad * pad, GstQuery * query)
 
       /* see if upstream can handle it */
       gst_query_ref (query);
-      res = gst_pad_query (GST_BASE_VIDEO_CODEC_SINK_PAD (base_parse), query);
+      res = gst_pad_query (GST_BASE_VIDEO_PARSE_SINK_PAD (base_parse), query);
       if (res)
         goto done;
 
@@ -304,7 +322,7 @@ gst_base_video_parse_src_query (GstPad * pad, GstQuery * query)
 
       /* see if upstream can handle it */
       gst_query_ref (query);
-      res = gst_pad_query (GST_BASE_VIDEO_CODEC_SINK_PAD (base_parse), query);
+      res = gst_pad_query (GST_BASE_VIDEO_PARSE_SINK_PAD (base_parse), query);
       if (res)
         goto done;
 
@@ -350,7 +368,7 @@ gst_base_video_parse_src_event (GstPad * pad, GstEvent * event)
       /* see if upstream can handle it */
       gst_event_ref (event);
       res =
-          gst_pad_push_event (GST_BASE_VIDEO_CODEC_SINK_PAD (base_video_parse),
+          gst_pad_push_event (GST_BASE_VIDEO_PARSE_SINK_PAD (base_video_parse),
           event);
       if (res) {
         gst_event_unref (event);
@@ -373,7 +391,7 @@ gst_base_video_parse_src_event (GstPad * pad, GstEvent * event)
           flags, cur_type, tcur, stop_type, tstop);
 
       res =
-          gst_pad_push_event (GST_BASE_VIDEO_CODEC_SINK_PAD (base_video_parse),
+          gst_pad_push_event (GST_BASE_VIDEO_PARSE_SINK_PAD (base_video_parse),
           real_seek);
 
       break;
@@ -425,7 +443,7 @@ gst_base_video_parse_sink_event (GstPad * pad, GstEvent * event)
     case GST_EVENT_FLUSH_STOP:
       gst_base_video_parse_reset (base_video_parse);
       res =
-          gst_pad_push_event (GST_BASE_VIDEO_CODEC_SRC_PAD (base_video_parse),
+          gst_pad_push_event (GST_BASE_VIDEO_PARSE_SRC_PAD (base_video_parse),
           event);
       break;
     case GST_EVENT_EOS:
@@ -440,7 +458,7 @@ gst_base_video_parse_sink_event (GstPad * pad, GstEvent * event)
       }
 
       res =
-          gst_pad_push_event (GST_BASE_VIDEO_CODEC_SRC_PAD (base_video_parse),
+          gst_pad_push_event (GST_BASE_VIDEO_PARSE_SRC_PAD (base_video_parse),
           event);
       break;
     }
@@ -487,7 +505,7 @@ gst_base_video_parse_sink_event (GstPad * pad, GstEvent * event)
           rate, GST_FORMAT_TIME, start, stop, time);
 
       res =
-          gst_pad_push_event (GST_BASE_VIDEO_CODEC_SRC_PAD (base_video_parse),
+          gst_pad_push_event (GST_BASE_VIDEO_PARSE_SRC_PAD (base_video_parse),
           event);
       break;
     }
@@ -828,7 +846,7 @@ gst_base_video_parse_push (GstBaseVideoParse * base_video_parse,
     base_video_parse->caps =
         base_video_parse_class->get_caps (base_video_parse);
 
-    ret = gst_pad_set_caps (GST_BASE_VIDEO_CODEC_SRC_PAD (base_video_parse),
+    ret = gst_pad_set_caps (GST_BASE_VIDEO_PARSE_SRC_PAD (base_video_parse),
         base_video_parse->caps);
 
     if (!ret) {
@@ -837,7 +855,7 @@ gst_base_video_parse_push (GstBaseVideoParse * base_video_parse,
     }
   }
   gst_buffer_set_caps (buffer,
-      GST_PAD_CAPS (GST_BASE_VIDEO_CODEC_SRC_PAD (base_video_parse)));
+      GST_PAD_CAPS (GST_BASE_VIDEO_PARSE_SRC_PAD (base_video_parse)));
 
   GST_DEBUG ("pushing ts=%lld dur=%lld off=%lld off_end=%lld",
       GST_BUFFER_TIMESTAMP (buffer),
@@ -851,5 +869,5 @@ gst_base_video_parse_push (GstBaseVideoParse * base_video_parse,
     GST_BUFFER_FLAG_UNSET (buffer, GST_BUFFER_FLAG_DISCONT);
   }
 
-  return gst_pad_push (GST_BASE_VIDEO_CODEC_SRC_PAD (base_video_parse), buffer);
+  return gst_pad_push (GST_BASE_VIDEO_PARSE_SRC_PAD (base_video_parse), buffer);
 }

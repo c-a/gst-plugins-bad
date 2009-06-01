@@ -20,7 +20,6 @@
 #ifndef _GST_BASE_VIDEO_PARSE_H_
 #define _GST_BASE_VIDEO_PARSE_H_
 
-#include <gst/video/gstbasevideocodec.h>
 #include <gst/video/gstbasevideoutils.h>
 
 G_BEGIN_DECLS
@@ -52,6 +51,22 @@ G_BEGIN_DECLS
 #define GST_BASE_VIDEO_PARSE_SRC_NAME     "src"
 
 /**
+ * GST_BASE_VIDEO_PARSE_SRC_PAD:
+ * @obj: base video codec instance
+ *
+ * Gives the pointer to the source #GstPad object of the element.
+ */
+#define GST_BASE_VIDEO_PARSE_SRC_PAD(obj)         (((GstBaseVideoParse *) (obj))->srcpad)
+
+/**
+ * GST_BASE_VIDEO_PARSE_SINK_PAD:
+ * @obj: base video codec instance
+ *
+ * Gives the pointer to the sink #GstPad object of the element.
+ */
+#define GST_BASE_VIDEO_PARSE_SINK_PAD(obj)        (((GstBaseVideoParse *) (obj))->sinkpad)
+
+/**
    * GST_BASE_VIDEO_PARSE_FLOW_NEED_DATA:
    *
    */
@@ -62,9 +77,12 @@ typedef struct _GstBaseVideoParseClass GstBaseVideoParseClass;
 
 struct _GstBaseVideoParse
 {
-  GstBaseVideoCodec base_video_codec;
+  GstElement element;
 
   /*< private >*/
+  GstPad *sinkpad;
+  GstPad *srcpad;
+  
   GstAdapter *input_adapter;
   GstAdapter *output_adapter;
 
@@ -94,7 +112,7 @@ struct _GstBaseVideoParse
 
 struct _GstBaseVideoParseClass
 {
-  GstBaseVideoCodecClass base_video_codec_class;
+  GstElementClass element_class;
 
   gboolean      (*start)               (GstBaseVideoParse *parse);
   gboolean      (*stop)                (GstBaseVideoParse *parse);
