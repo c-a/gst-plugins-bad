@@ -332,7 +332,7 @@ mpeg_util_parse_picture_coding_extension (MPEGPictureExt * ext, guint8 * data,
 }
 
 gboolean
-mpeg_util_parse_picture_gop (MPEGPictureGOP * gop, GstBuffer * buffer)
+mpeg_util_parse_gop (MPEGGop * gop, GstBuffer * buffer)
 {
   GstBitReader reader = GST_BIT_READER_INIT_FROM_BUFFER (buffer);
 

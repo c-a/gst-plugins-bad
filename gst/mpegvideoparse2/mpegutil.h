@@ -27,7 +27,7 @@ typedef struct MPEGSeqHdr MPEGSeqHdr;
 typedef struct MPEGSeqExtHdr MPEGSeqExtHdr;
 typedef struct MPEGPictureHdr MPEGPictureHdr;
 typedef struct MPEGPictureExt MPEGPictureExt;
-typedef struct MPEGPictureGOP MPEGPictureGOP;
+typedef struct MPEGGop MPEGGop;
 typedef struct MPEGQuantMatrix MPEGQuantMatrix;
 
 /* Packet ID codes for different packet types we
@@ -112,7 +112,7 @@ struct MPEGPictureExt
   guint8 alternate_scan;
 };
 
-struct MPEGPictureGOP
+struct MPEGGop
 {
   guint8 drop_frame_flag;
 
@@ -138,7 +138,7 @@ gboolean mpeg_util_parse_picture_hdr (MPEGPictureHdr * hdr, GstBuffer *buffer);
 gboolean mpeg_util_parse_picture_coding_extension (MPEGPictureExt *ext,
     guint8 *data, guint8 *end);
 
-gboolean mpeg_util_parse_picture_gop (MPEGPictureGOP * gop, GstBuffer *buffer);
+gboolean mpeg_util_parse_gop (MPEGGop * gop, GstBuffer *buffer);
 
 gboolean mpeg_util_parse_quant_matrix (MPEGQuantMatrix * qm, guint8 * data,
     guint8 * end);

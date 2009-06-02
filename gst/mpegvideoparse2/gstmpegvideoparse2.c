@@ -201,11 +201,11 @@ static gboolean
 gst_mvp2_handle_gop (GstMpegVideoParse2 * mpegparse, GstBuffer * buffer)
 {
   GstBaseVideoParse *parse = GST_BASE_VIDEO_PARSE (mpegparse);
-  MPEGPictureGOP gop;
+  MPEGGop gop;
   GstVideoState *state;
   GstClockTime time;
 
-  if (!mpeg_util_parse_picture_gop (&gop, buffer))
+  if (!mpeg_util_parse_gop (&gop, buffer))
     return FALSE;
 
   state = gst_base_video_parse_get_state (parse);
