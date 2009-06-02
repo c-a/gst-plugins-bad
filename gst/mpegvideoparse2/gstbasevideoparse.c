@@ -723,35 +723,30 @@ gst_base_video_parse_finish_frame (GstBaseVideoParse * base_video_parse)
     frame->presentation_timestamp = base_video_parse->upstream_timestamp;
   }
 
-  else if (frame->presentation_timestamp == GST_CLOCK_TIME_NONE) {
+  if (frame->is_sync_point) {
+    if (GST_CLOCK_TIME_IS_VALID (frame->presentation_timestamp)
+        && frame->presentation_frame_number != -1) {
+      base_video_parse->timestamp_offset =
+          frame->presentation_timestamp -
+          gst_util_uint64_scale (frame->presentation_frame_number,
+          base_video_parse->state.fps_d * GST_SECOND,
+          base_video_parse->state.fps_n);
 
-    /* calculate timestamp from frame number if we've got one */
-    if (frame->presentation_frame_number != -1) {
-      frame->presentation_timestamp =
-          gst_base_video_parse_get_timestamp (base_video_parse,
-          frame->presentation_frame_number);
+      base_video_parse->distance_from_sync = 0;
     }
 
-    /* else we simply take the previous frame's timestamp
-     * and add the frame's duration */
-    else {
-      frame->presentation_timestamp = base_video_parse->presentation_timestamp +
-          frame->presentation_duration;
-    }
+    else
+      GST_DEBUG ("subclass set frame as sync_point but didn't supply "
+          "presentation_timestamp and presentation_frame_number");
   }
 
-  /* calculate frame number from timestamp if we haven't got one */
-  if (frame->presentation_frame_number == -1) {
-    frame->presentation_frame_number =
-        gst_base_video_parse_get_frame_number (base_video_parse,
-        frame->presentation_timestamp);
-  } else if (frame->is_sync_point) {
-    base_video_parse->timestamp_offset =
-        frame->presentation_timestamp -
-        gst_util_uint64_scale (frame->presentation_frame_number,
-        base_video_parse->state.fps_d * GST_SECOND,
-        base_video_parse->state.fps_n);
-    base_video_parse->distance_from_sync = 0;
+  /* calculate timestamp from frame number if we've got one */
+  else if (frame->presentation_timestamp == GST_CLOCK_TIME_NONE
+      && frame->presentation_frame_number != -1) {
+
+    frame->presentation_timestamp =
+        gst_base_video_parse_get_timestamp (base_video_parse,
+        frame->presentation_frame_number);
   }
 
   base_video_parse->presentation_timestamp = frame->presentation_timestamp;
@@ -861,7 +856,7 @@ gst_base_video_parse_push (GstBaseVideoParse * base_video_parse,
   gst_buffer_set_caps (buffer,
       GST_PAD_CAPS (GST_BASE_VIDEO_PARSE_SRC_PAD (base_video_parse)));
 
-  GST_DEBUG ("pushing buffer of %u bytes ts=%" GST_TIME_FORMAT " dur=%"
+  GST_LOG ("pushing buffer of %u bytes ts=%" GST_TIME_FORMAT " dur=%"
       GST_TIME_FORMAT " off=%" GST_TIME_FORMAT " off_end=%" GST_TIME_FORMAT,
       GST_BUFFER_SIZE (buffer), GST_TIME_ARGS (GST_BUFFER_TIMESTAMP (buffer)),
       GST_TIME_ARGS (GST_BUFFER_DURATION (buffer)),

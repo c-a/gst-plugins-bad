@@ -215,8 +215,6 @@ gst_mvp2_parse_data (GstBaseVideoParse * parse, GstBuffer * buffer)
   guint8 start_code;
   GstFlowReturn ret = GST_FLOW_OK;
 
-  GST_DEBUG_OBJECT (mpegparse, "buffer_size: %d", GST_BUFFER_SIZE (buffer));
-
   if (!gst_byte_reader_skip (&reader, 3))
     goto invalid_packet;
 
@@ -230,6 +228,16 @@ gst_mvp2_parse_data (GstBaseVideoParse * parse, GstBuffer * buffer)
       GST_DEBUG_OBJECT (mpegparse, "Drop data since we haven't found a "
           "MPEG_PACKET_SEQUENCE yet");
       goto invalid_packet;
+    }
+
+    /* use the first sequence as a sync point */
+    else {
+      GstVideoFrame *frame;
+
+      frame = gst_base_video_parse_get_frame (parse);
+      frame->presentation_timestamp = 0;
+      frame->presentation_frame_number = 0;
+      gst_base_video_parse_set_sync_point (parse);
     }
   }
 
