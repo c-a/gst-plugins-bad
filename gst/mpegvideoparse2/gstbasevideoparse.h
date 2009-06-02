@@ -106,6 +106,7 @@ struct _GstBaseVideoParse
   gboolean set_output_caps;
 
   GstClockTime input_buffer_timestamp;
+  GstClockTime upstream_timestamp;
 
   gint64 timestamp_offset;
 };
