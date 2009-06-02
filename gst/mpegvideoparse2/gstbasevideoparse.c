@@ -718,7 +718,8 @@ gst_base_video_parse_finish_frame (GstBaseVideoParse * base_video_parse)
       base_video_parse->state.fps_d, base_video_parse->state.fps_n);
 
   /* we prefer timestamps coming from upstream */
-  if (GST_CLOCK_TIME_IS_VALID (upstream_timestamp)) {
+  if (GST_CLOCK_TIME_IS_VALID (upstream_timestamp)
+      && upstream_timestamp != base_video_parse->presentation_timestamp) {
     GST_DEBUG ("Got upstream timestamp");
     frame->presentation_timestamp = base_video_parse->upstream_timestamp;
   }
@@ -741,7 +742,7 @@ gst_base_video_parse_finish_frame (GstBaseVideoParse * base_video_parse)
   }
 
   /* calculate timestamp from frame number if we've got one */
-  else if (frame->presentation_timestamp == GST_CLOCK_TIME_NONE
+  if (frame->presentation_timestamp == GST_CLOCK_TIME_NONE
       && frame->presentation_frame_number != -1) {
 
     frame->presentation_timestamp =

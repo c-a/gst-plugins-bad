@@ -48,6 +48,7 @@ struct _GstMpegVideoParse2 {
 
   GstMVP2State state;
   guint8 prev_packet;
+  guint64 gop_start;
 
   GstBuffer *seq_header_buffer;
   gint version;

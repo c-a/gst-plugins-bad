@@ -89,8 +89,10 @@ struct MPEGSeqExtHdr
 
 struct MPEGPictureHdr
 {
+  guint16 tsn;
   guint8 pic_type;
-
+  guint16 vbv_delay;
+  
   guint8 full_pel_forward_vector, full_pel_backward_vector;
 
   guint8 f_code[2][2];
@@ -131,18 +133,14 @@ gboolean mpeg_util_parse_sequence_hdr (MPEGSeqHdr *hdr, GstBuffer *buffer);
 gboolean mpeg_util_parse_sequence_extension (MPEGSeqExtHdr *hdr,
     GstBuffer *buffer);
 
-gboolean mpeg_util_parse_picture_hdr (MPEGPictureHdr * hdr, guint8 * data,
-    guint8 * end);
+gboolean mpeg_util_parse_picture_hdr (MPEGPictureHdr * hdr, GstBuffer *buffer);
 
 gboolean mpeg_util_parse_picture_coding_extension (MPEGPictureExt *ext,
     guint8 *data, guint8 *end);
 
-gboolean mpeg_util_parse_picture_gop (MPEGPictureGOP * gop, guint8 * data,
-    guint8 * end);
+gboolean mpeg_util_parse_picture_gop (MPEGPictureGOP * gop, GstBuffer *buffer);
 
 gboolean mpeg_util_parse_quant_matrix (MPEGQuantMatrix * qm, guint8 * data,
     guint8 * end);
-
-guint32 read_bits (guint8 * buf, gint start_bit, gint n_bits);
 
 #endif

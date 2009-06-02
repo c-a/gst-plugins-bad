@@ -246,34 +246,47 @@ mpeg_util_parse_sequence_hdr (MPEGSeqHdr * hdr, GstBuffer * buffer)
 }
 
 gboolean
-mpeg_util_parse_picture_hdr (MPEGPictureHdr * hdr, guint8 * data, guint8 * end)
+mpeg_util_parse_picture_hdr (MPEGPictureHdr * hdr, GstBuffer * buffer)
 {
-  guint32 code;
+  GstBitReader reader = GST_BIT_READER_INIT_FROM_BUFFER (buffer);
 
-  if (G_UNLIKELY ((end - data) < 8))
-    return FALSE;               /* Packet too small */
-
-  code = GST_READ_UINT32_BE (data);
-  if (G_UNLIKELY (code != (0x00000100 | MPEG_PACKET_PICTURE)))
+  /* skip sync word */
+  if (!gst_bit_reader_skip (&reader, 8 * 4))
     return FALSE;
 
-  /* Skip the sync word */
-  data += 4;
+  /* temperal sequence number */
+  if (!gst_bit_reader_get_bits_uint16 (&reader, &hdr->tsn, 10))
+    return FALSE;
 
-  hdr->pic_type = (data[1] >> 3) & 0x07;
+  /* frame type */
+  if (!gst_bit_reader_get_bits_uint8 (&reader, &hdr->pic_type, 3))
+    return FALSE;
+
   if (hdr->pic_type == 0 || hdr->pic_type > 4)
     return FALSE;               /* Corrupted picture packet */
 
-  if (hdr->pic_type == P_FRAME || hdr->pic_type == B_FRAME) {
-    if (G_UNLIKELY ((end - data) < 5))
-      return FALSE;             /* packet too small */
+  /* VBV delay */
+  if (!gst_bit_reader_get_bits_uint16 (&reader, &hdr->vbv_delay, 16))
+    return FALSE;
 
-    hdr->full_pel_forward_vector = read_bits (data + 3, 5, 1);
-    hdr->f_code[0][0] = hdr->f_code[0][1] = read_bits (data + 3, 6, 3);
+  if (hdr->pic_type == P_FRAME || hdr->pic_type == B_FRAME) {
+
+    if (!gst_bit_reader_get_bits_uint8 (&reader, &hdr->full_pel_forward_vector,
+            1))
+      return FALSE;
+
+    if (!gst_bit_reader_get_bits_uint8 (&reader, &hdr->f_code[0][0], 3))
+      return FALSE;
+    hdr->f_code[0][1] = hdr->f_code[0][0];
 
     if (hdr->pic_type == B_FRAME) {
-      hdr->full_pel_backward_vector = read_bits (data + 4, 1, 1);
-      hdr->f_code[1][0] = hdr->f_code[1][1] = read_bits (data + 4, 2, 3);
+      if (!gst_bit_reader_get_bits_uint8 (&reader,
+              &hdr->full_pel_backward_vector, 1))
+        return FALSE;
+
+      if (!gst_bit_reader_get_bits_uint8 (&reader, &hdr->f_code[1][0], 3))
+        return FALSE;
+      hdr->f_code[1][1] = hdr->f_code[1][0];
     } else
       hdr->full_pel_backward_vector = 0;
   } else {
@@ -319,30 +332,38 @@ mpeg_util_parse_picture_coding_extension (MPEGPictureExt * ext, guint8 * data,
 }
 
 gboolean
-mpeg_util_parse_picture_gop (MPEGPictureGOP * gop, guint8 * data, guint8 * end)
+mpeg_util_parse_picture_gop (MPEGPictureGOP * gop, GstBuffer * buffer)
 {
-  guint32 code;
+  GstBitReader reader = GST_BIT_READER_INIT_FROM_BUFFER (buffer);
 
-  if (G_UNLIKELY ((end - data) < 8))
-    return FALSE;               /* Packet too small */
-
-  code = GST_READ_UINT32_BE (data);
-
-  if (G_UNLIKELY (G_UNLIKELY (code != (0x00000100 | MPEG_PACKET_GOP))))
+  /* skip sync word */
+  if (!gst_bit_reader_skip (&reader, 8 * 4))
     return FALSE;
 
-  /* Skip the sync word */
-  data += 4;
+  if (!gst_bit_reader_get_bits_uint8 (&reader, &gop->drop_frame_flag, 1))
+    return FALSE;
 
-  gop->drop_frame_flag = read_bits (data, 0, 1);
+  if (!gst_bit_reader_get_bits_uint8 (&reader, &gop->hour, 5))
+    return FALSE;
 
-  gop->hour = read_bits (data, 1, 5);
-  gop->minute = read_bits (data, 6, 6);
-  gop->second = read_bits (data + 1, 4, 6);
-  gop->frame = read_bits (data + 2, 3, 6);
+  if (!gst_bit_reader_get_bits_uint8 (&reader, &gop->minute, 6))
+    return FALSE;
 
-  gop->closed_gop = read_bits (data + 3, 1, 1);
-  gop->broken_gop = read_bits (data + 3, 2, 1);
+  /* skip unused bit */
+  if (!gst_bit_reader_skip (&reader, 1))
+    return FALSE;
+
+  if (!gst_bit_reader_get_bits_uint8 (&reader, &gop->second, 6))
+    return FALSE;
+
+  if (!gst_bit_reader_get_bits_uint8 (&reader, &gop->frame, 6))
+    return FALSE;
+
+  if (!gst_bit_reader_get_bits_uint8 (&reader, &gop->closed_gop, 1))
+    return FALSE;
+
+  if (!gst_bit_reader_get_bits_uint8 (&reader, &gop->broken_gop, 1))
+    return FALSE;
 
   return TRUE;
 }

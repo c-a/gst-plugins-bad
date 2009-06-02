@@ -197,6 +197,48 @@ gst_mvp2_handle_sequence (GstMpegVideoParse2 * mpegparse, GstBuffer * buffer)
   return TRUE;
 }
 
+static gboolean
+gst_mvp2_handle_gop (GstMpegVideoParse2 * mpegparse, GstBuffer * buffer)
+{
+  GstBaseVideoParse *parse = GST_BASE_VIDEO_PARSE (mpegparse);
+  MPEGPictureGOP gop;
+  GstVideoState *state;
+  GstClockTime time;
+
+  if (!mpeg_util_parse_picture_gop (&gop, buffer))
+    return FALSE;
+
+  state = gst_base_video_parse_get_state (parse);
+
+  time = GST_SECOND * (gop.hour * 3600 + gop.minute * 60 + gop.second);
+
+  GST_DEBUG ("gop timestamp: %" GST_TIME_FORMAT, GST_TIME_ARGS (time));
+
+  mpegparse->gop_start =
+      gst_util_uint64_scale (time, state->fps_n,
+      state->fps_d * GST_SECOND) + gop.frame;
+
+  GST_DEBUG ("gop frame_nr: %" G_GUINT64_FORMAT, mpegparse->gop_start);
+
+  return TRUE;
+}
+
+static gboolean
+gst_mvp2_handle_picture (GstMpegVideoParse2 * mpegparse, GstBuffer * buffer)
+{
+  GstBaseVideoParse *parse = GST_BASE_VIDEO_PARSE (mpegparse);
+  MPEGPictureHdr hdr;
+  GstVideoFrame *frame;
+
+  if (!mpeg_util_parse_picture_hdr (&hdr, buffer))
+    return FALSE;
+
+  frame = gst_base_video_parse_get_frame (parse);
+  frame->presentation_frame_number = mpegparse->gop_start + hdr.tsn;
+
+  return TRUE;
+}
+
 GstFlowReturn
 gst_mvp2_finish_frame (GstMpegVideoParse2 * mpegparse)
 {
@@ -259,6 +301,10 @@ gst_mvp2_parse_data (GstBaseVideoParse * parse, GstBuffer * buffer)
 
       if (mpegparse->prev_packet != MPEG_PACKET_SEQUENCE)
         ret = gst_mvp2_finish_frame (mpegparse);
+
+      if (!gst_mvp2_handle_gop (mpegparse, buffer))
+        goto invalid_packet;
+
       break;
     }
     case MPEG_PACKET_PICTURE:
@@ -269,10 +315,9 @@ gst_mvp2_parse_data (GstBaseVideoParse * parse, GstBuffer * buffer)
           mpegparse->prev_packet != MPEG_PACKET_GOP)
         ret = gst_mvp2_finish_frame (mpegparse);
 
-#if 0
       if (!gst_mvp2_handle_picture (mpegparse, buffer))
         goto invalid_packet;
-#endif
+
       break;
     }
     case MPEG_PACKET_EXTENSION:
@@ -291,6 +336,10 @@ gst_mvp2_parse_data (GstBaseVideoParse * parse, GstBuffer * buffer)
           GST_DEBUG_OBJECT (mpegparse, "MPEG_PACKET_SEQUENCE_EXTENSION");
           if (!gst_mvp2_handle_sequence_extension (mpegparse, buffer))
             goto invalid_packet;
+
+          /* so that we don't finish the frame if we get a MPEG_PACKET_PICTURE
+           * or MPEG_PACKET_GOP after this */
+          start_code = MPEG_PACKET_SEQUENCE;
           break;
         }
         default:
@@ -312,6 +361,8 @@ invalid_packet:
 static GstFlowReturn
 gst_mvp2_shape_output (GstBaseVideoParse * parse, GstVideoFrame * frame)
 {
+  GST_DEBUG ("frame_nr: %d", frame->presentation_frame_number);
+
   return gst_base_video_parse_push (parse, frame->src_buffer);
 }
 
@@ -322,6 +373,7 @@ gst_mvp2_start (GstBaseVideoParse * parse)
 
   mpegparse->state = GST_MVP2_STATE_NEED_SEQUENCE;
   mpegparse->prev_packet = 0;
+  mpegparse->gop_start = 0;
 
   mpegparse->version = 1;
   mpegparse->seq_header_buffer = NULL;
