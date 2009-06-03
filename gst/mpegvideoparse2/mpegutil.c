@@ -369,41 +369,42 @@ mpeg_util_parse_gop (MPEGGop * gop, GstBuffer * buffer)
 }
 
 gboolean
-mpeg_util_parse_quant_matrix (MPEGQuantMatrix * qm, guint8 * data, guint8 * end)
+mpeg_util_parse_quant_matrix (MPEGQuantMatrix * qm, GstBuffer * buffer)
 {
-  guint32 code;
-  gboolean load_intra_flag, load_non_intra_flag;
-  gint i;
+  GstBitReader reader = GST_BIT_READER_INIT_FROM_BUFFER (buffer);
+  guint8 load_intra_flag, load_non_intra_flag;
 
-  if (G_UNLIKELY ((end - data) < 5))
-    return FALSE;               /* Packet too small */
-
-  code = GST_READ_UINT32_BE (data);
-
-  if (G_UNLIKELY (G_UNLIKELY (code != (0x00000100 | MPEG_PACKET_EXTENSION))))
+  /* skip sync word */
+  if (!gst_bit_reader_skip (&reader, 8 * 4))
     return FALSE;
 
-  /* Skip the sync word */
-  data += 4;
+  /* skip extension code */
+  if (!gst_bit_reader_skip (&reader, 4))
+    return FALSE;
 
-  load_intra_flag = read_bits (data, 4, 1);
+  /* intra quantizer matrix */
+  if (!gst_bit_reader_get_bits_uint8 (&reader, &load_intra_flag, 1))
+    return FALSE;
   if (load_intra_flag) {
-    if (G_UNLIKELY ((end - data) < 64))
-      return FALSE;
-    for (i = 0; i < 64; i++)
-      qm->intra_quantizer_matrix[mpeg2_scan[i]] = read_bits (data + i, 5, 8);
-
-    data += 64;
+    gint i;
+    for (i = 0; i < 64; i++) {
+      if (!gst_bit_reader_get_bits_uint8 (&reader,
+              &qm->intra_quantizer_matrix[mpeg2_scan[i]], 8))
+        return FALSE;
+    }
   } else
     memcpy (qm->intra_quantizer_matrix, default_intra_quantizer_matrix, 64);
 
-  load_non_intra_flag = read_bits (data, 5 + load_intra_flag, 1);
+  /* non intra quantizer matrix */
+  if (!gst_bit_reader_get_bits_uint8 (&reader, &load_non_intra_flag, 1))
+    return FALSE;
   if (load_non_intra_flag) {
-    if (G_UNLIKELY ((end - data) < 64))
-      return FALSE;
-    for (i = 0; i < 64; i++)
-      qm->non_intra_quantizer_matrix[mpeg2_scan[i]] =
-          read_bits (data + i, 6 + load_intra_flag, 8);
+    gint i;
+    for (i = 0; i < 64; i++) {
+      if (!gst_bit_reader_get_bits_uint8 (&reader,
+              &qm->non_intra_quantizer_matrix[mpeg2_scan[i]], 8))
+        return FALSE;
+    }
   } else
     memset (qm->non_intra_quantizer_matrix, 16, 64);
 

@@ -140,7 +140,6 @@ gboolean mpeg_util_parse_picture_coding_extension (MPEGPictureExt *ext,
 
 gboolean mpeg_util_parse_gop (MPEGGop * gop, GstBuffer *buffer);
 
-gboolean mpeg_util_parse_quant_matrix (MPEGQuantMatrix * qm, guint8 * data,
-    guint8 * end);
+gboolean mpeg_util_parse_quant_matrix (MPEGQuantMatrix * qm, GstBuffer *buffer);
 
 #endif
