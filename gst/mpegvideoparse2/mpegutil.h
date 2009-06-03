@@ -110,6 +110,7 @@ struct MPEGPictureExt
   guint8 q_scale_type;
   guint8 intra_vlc_format;
   guint8 alternate_scan;
+  guint8 repeat_first_field;
 };
 
 struct MPEGGop
@@ -136,7 +137,7 @@ gboolean mpeg_util_parse_sequence_extension (MPEGSeqExtHdr *hdr,
 gboolean mpeg_util_parse_picture_hdr (MPEGPictureHdr * hdr, GstBuffer *buffer);
 
 gboolean mpeg_util_parse_picture_coding_extension (MPEGPictureExt *ext,
-    guint8 *data, guint8 *end);
+    GstBuffer *buffer);
 
 gboolean mpeg_util_parse_gop (MPEGGop * gop, GstBuffer *buffer);
 

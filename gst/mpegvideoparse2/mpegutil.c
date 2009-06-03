@@ -54,31 +54,6 @@ guint8 mpeg2_scan[64] = {
   53, 60, 61, 54, 47, 55, 62, 63
 };
 
-guint8 bits[] = { 0x80, 0x40, 0x20, 0x10, 0x08, 0x04, 0x02, 0x01 };
-
-guint32
-read_bits (guint8 * buf, gint start_bit, gint n_bits)
-{
-  gint i;
-  guint32 ret = 0x00;
-
-  buf += start_bit / 8;
-  start_bit %= 8;
-
-  for (i = 0; i < n_bits; i++) {
-    guint32 tmp;
-
-    tmp = ((*buf & bits[start_bit]) >> (7 - start_bit));
-    ret = (ret | (tmp << (n_bits - i - 1)));
-    if (++start_bit == 8) {
-      buf += 1;
-      start_bit = 0;
-    }
-  }
-
-  return ret;
-}
-
 static void
 set_fps_from_code (MPEGSeqHdr * hdr, guint8 fps_code)
 {
@@ -298,35 +273,65 @@ mpeg_util_parse_picture_hdr (MPEGPictureHdr * hdr, GstBuffer * buffer)
 }
 
 gboolean
-mpeg_util_parse_picture_coding_extension (MPEGPictureExt * ext, guint8 * data,
-    guint8 * end)
+mpeg_util_parse_picture_coding_extension (MPEGPictureExt * ext,
+    GstBuffer * buffer)
 {
-  guint32 code;
+  GstBitReader reader = GST_BIT_READER_INIT_FROM_BUFFER (buffer);
 
-  if (G_UNLIKELY ((end - data) < 9))
-    return FALSE;               /* Packet too small */
-
-  code = GST_READ_UINT32_BE (data);
-
-  if (G_UNLIKELY (G_UNLIKELY (code != (0x00000100 | MPEG_PACKET_EXTENSION))))
+  /* skip sync word */
+  if (!gst_bit_reader_skip (&reader, 8 * 4))
     return FALSE;
 
-  /* Skip the sync word */
-  data += 4;
+  /* skip extension code */
+  if (!gst_bit_reader_skip (&reader, 4))
+    return FALSE;
 
-  ext->f_code[0][0] = read_bits (data, 4, 4);
-  ext->f_code[0][1] = read_bits (data + 1, 0, 4);
-  ext->f_code[1][0] = read_bits (data + 1, 4, 4);
-  ext->f_code[1][1] = read_bits (data + 2, 0, 4);
+  /* f_code */
+  if (!gst_bit_reader_get_bits_uint8 (&reader, &ext->f_code[0][0], 4))
+    return FALSE;
+  if (!gst_bit_reader_get_bits_uint8 (&reader, &ext->f_code[0][1], 4))
+    return FALSE;
+  if (!gst_bit_reader_get_bits_uint8 (&reader, &ext->f_code[1][0], 4))
+    return FALSE;
+  if (!gst_bit_reader_get_bits_uint8 (&reader, &ext->f_code[1][1], 4))
+    return FALSE;
 
-  ext->intra_dc_precision = read_bits (data + 2, 4, 2);
-  ext->picture_structure = read_bits (data + 2, 6, 2);
-  ext->top_field_first = read_bits (data + 3, 0, 1);
-  ext->frame_pred_frame_dct = read_bits (data + 3, 1, 1);
-  ext->concealment_motion_vectors = read_bits (data + 3, 2, 1);
-  ext->q_scale_type = read_bits (data + 3, 3, 1);
-  ext->intra_vlc_format = read_bits (data + 3, 4, 1);
-  ext->alternate_scan = read_bits (data + 3, 5, 1);
+  /* intra DC precision */
+  if (!gst_bit_reader_get_bits_uint8 (&reader, &ext->intra_dc_precision, 2))
+    return FALSE;
+
+  /* picture structure */
+  if (!gst_bit_reader_get_bits_uint8 (&reader, &ext->picture_structure, 2))
+    return FALSE;
+
+  /* top field first */
+  if (!gst_bit_reader_get_bits_uint8 (&reader, &ext->top_field_first, 1))
+    return FALSE;
+
+  /* frame pred frame dct */
+  if (!gst_bit_reader_get_bits_uint8 (&reader, &ext->frame_pred_frame_dct, 1))
+    return FALSE;
+
+  /* concealment motion vectors */
+  if (!gst_bit_reader_get_bits_uint8 (&reader, &ext->concealment_motion_vectors,
+          1))
+    return FALSE;
+
+  /* q scale type */
+  if (!gst_bit_reader_get_bits_uint8 (&reader, &ext->q_scale_type, 1))
+    return FALSE;
+
+  /* intra vlc format */
+  if (!gst_bit_reader_get_bits_uint8 (&reader, &ext->intra_vlc_format, 1))
+    return FALSE;
+
+  /* alternate scan */
+  if (!gst_bit_reader_get_bits_uint8 (&reader, &ext->alternate_scan, 1))
+    return FALSE;
+
+  /* repeat first field */
+  if (!gst_bit_reader_get_bits_uint8 (&reader, &ext->repeat_first_field, 1))
+    return FALSE;
 
   return TRUE;
 }
