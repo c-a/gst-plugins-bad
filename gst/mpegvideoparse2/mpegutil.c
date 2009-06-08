@@ -135,8 +135,11 @@ mpeg_util_parse_sequence_extension (MPEGSeqExtHdr * hdr, GstBuffer * buffer)
   if (!gst_bit_reader_get_bits_uint8 (&reader, &hdr->vert_size_ext, 2))
     return FALSE;
 
+  if (!gst_bit_reader_get_bits_uint16 (&reader, &hdr->bitrate_ext, 12))
+    return FALSE;
+
   /* skip to framerate extension */
-  if (!gst_bit_reader_skip (&reader, 22))
+  if (!gst_bit_reader_skip (&reader, 9))
     return FALSE;
 
   /* framerate extension */
@@ -253,20 +256,22 @@ mpeg_util_parse_picture_hdr (MPEGPictureHdr * hdr, GstBuffer * buffer)
     if (!gst_bit_reader_get_bits_uint8 (&reader, &hdr->f_code[0][0], 3))
       return FALSE;
     hdr->f_code[0][1] = hdr->f_code[0][0];
-
-    if (hdr->pic_type == B_FRAME) {
-      if (!gst_bit_reader_get_bits_uint8 (&reader,
-              &hdr->full_pel_backward_vector, 1))
-        return FALSE;
-
-      if (!gst_bit_reader_get_bits_uint8 (&reader, &hdr->f_code[1][0], 3))
-        return FALSE;
-      hdr->f_code[1][1] = hdr->f_code[1][0];
-    } else
-      hdr->full_pel_backward_vector = 0;
   } else {
     hdr->full_pel_forward_vector = 0;
+    hdr->f_code[0][0] = hdr->f_code[0][1] = 0;
+  }
+
+  if (hdr->pic_type == B_FRAME) {
+    if (!gst_bit_reader_get_bits_uint8 (&reader,
+            &hdr->full_pel_backward_vector, 1))
+      return FALSE;
+
+    if (!gst_bit_reader_get_bits_uint8 (&reader, &hdr->f_code[1][0], 3))
+      return FALSE;
+    hdr->f_code[1][1] = hdr->f_code[1][0];
+  } else {
     hdr->full_pel_backward_vector = 0;
+    hdr->f_code[1][0] = hdr->f_code[1][1] = 0;
   }
 
   return TRUE;
@@ -331,6 +336,14 @@ mpeg_util_parse_picture_coding_extension (MPEGPictureExt * ext,
 
   /* repeat first field */
   if (!gst_bit_reader_get_bits_uint8 (&reader, &ext->repeat_first_field, 1))
+    return FALSE;
+
+  /* chroma_420_type */
+  if (!gst_bit_reader_get_bits_uint8 (&reader, &ext->chroma_420_type, 1))
+    return FALSE;
+
+  /* progressive_frame */
+  if (!gst_bit_reader_get_bits_uint8 (&reader, &ext->progressive_frame, 1))
     return FALSE;
 
   return TRUE;

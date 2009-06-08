@@ -83,6 +83,7 @@ struct MPEGSeqExtHdr
   
   guint8 horiz_size_ext, vert_size_ext;
 
+  guint16 bitrate_ext;
   guint8 fps_n_ext, fps_d_ext;
   
 };
@@ -111,6 +112,8 @@ struct MPEGPictureExt
   guint8 intra_vlc_format;
   guint8 alternate_scan;
   guint8 repeat_first_field;
+  guint8 chroma_420_type;
+  guint8 progressive_frame;
 };
 
 struct MPEGGop
