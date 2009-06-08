@@ -56,6 +56,10 @@ static GstFlowReturn
 gst_base_video_parse_drain (GstBaseVideoParse * base_video_parse,
     gboolean at_eos);
 
+static void
+gst_base_video_parse_send_pending_segs (GstBaseVideoParse * base_video_parse);
+static void
+gst_base_video_parse_clear_pending_segs (GstBaseVideoParse * base_video_parse);
 
 #define _do_init(bla) \
     GST_DEBUG_CATEGORY_INIT (gst_basevideoparse_debug, "basevideoparse", 0, \
@@ -146,6 +150,8 @@ gst_base_video_parse_reset (GstBaseVideoParse * base_video_parse)
     gst_caps_unref (base_video_parse->caps);
     base_video_parse->caps = NULL;
   }
+
+  gst_base_video_parse_clear_pending_segs (base_video_parse);
 
   gst_segment_init (&base_video_parse->state.segment, GST_FORMAT_TIME);
   gst_adapter_clear (base_video_parse->input_adapter);
@@ -504,9 +510,16 @@ gst_base_video_parse_sink_event (GstPad * pad, GstEvent * event)
       gst_segment_set_newsegment (&base_video_parse->state.segment, update,
           rate, GST_FORMAT_TIME, start, stop, time);
 
-      res =
-          gst_pad_push_event (GST_BASE_VIDEO_PARSE_SRC_PAD (base_video_parse),
-          event);
+      if (base_video_parse->caps) {
+        GST_WARNING ("ADSASD");
+        res =
+            gst_pad_push_event (GST_BASE_VIDEO_PARSE_SRC_PAD (base_video_parse),
+            event);
+      } else {
+        base_video_parse->pending_segs =
+            g_slist_append (base_video_parse->pending_segs, event);
+        res = TRUE;
+      }
       break;
     }
     default:
@@ -853,6 +866,8 @@ gst_base_video_parse_push (GstBaseVideoParse * base_video_parse,
       GST_WARNING ("pad didn't accept caps");
       return GST_FLOW_ERROR;
     }
+
+    gst_base_video_parse_send_pending_segs (base_video_parse);
   }
   gst_buffer_set_caps (buffer,
       GST_PAD_CAPS (GST_BASE_VIDEO_PARSE_SRC_PAD (base_video_parse)));
@@ -872,4 +887,32 @@ gst_base_video_parse_push (GstBaseVideoParse * base_video_parse,
   }
 
   return gst_pad_push (GST_BASE_VIDEO_PARSE_SRC_PAD (base_video_parse), buffer);
+}
+
+static void
+gst_base_video_parse_send_pending_segs (GstBaseVideoParse * base_video_parse)
+{
+  while (base_video_parse->pending_segs) {
+    GstEvent *ev = base_video_parse->pending_segs->data;
+
+    gst_pad_push_event (base_video_parse->srcpad, ev);
+
+    base_video_parse->pending_segs =
+        g_slist_delete_link (base_video_parse->pending_segs,
+        base_video_parse->pending_segs);
+  }
+  base_video_parse->pending_segs = NULL;
+}
+
+static void
+gst_base_video_parse_clear_pending_segs (GstBaseVideoParse * base_video_parse)
+{
+  while (base_video_parse->pending_segs) {
+    GstEvent *ev = base_video_parse->pending_segs->data;
+    gst_event_unref (ev);
+
+    base_video_parse->pending_segs =
+        g_slist_delete_link (base_video_parse->pending_segs,
+        base_video_parse->pending_segs);
+  }
 }

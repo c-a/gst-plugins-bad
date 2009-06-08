@@ -97,6 +97,8 @@ struct _GstBaseVideoParse
   GstVideoState state;
   gint distance_from_sync;
 
+  GSList *pending_segs;
+
   gboolean sink_clipping;
 
   guint64 presentation_timestamp;
