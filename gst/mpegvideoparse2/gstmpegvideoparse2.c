@@ -186,9 +186,7 @@ gst_mvp2_handle_sequence (GstMpegVideoParse2 * mpegparse, GstBuffer * buffer)
 
   gst_base_video_parse_set_state (parse, state);
 
-  if (mpegparse->seq_header_buffer)
-    gst_buffer_unref (mpegparse->seq_header_buffer);
-  mpegparse->seq_header_buffer = gst_buffer_ref (buffer);
+  gst_buffer_replace (&mpegparse->seq_header_buffer, buffer);
 
   gst_base_video_parse_set_sync_point (parse);
 
