@@ -113,7 +113,6 @@ gst_base_video_parse_init (GstBaseVideoParse * base_video_parse,
   gst_element_add_pad (GST_ELEMENT (base_video_parse),
       base_video_parse->srcpad);
 
-
   pad = GST_BASE_VIDEO_PARSE_SINK_PAD (base_video_parse);
 
   gst_pad_set_chain_function (pad, gst_base_video_parse_chain);
@@ -128,6 +127,8 @@ gst_base_video_parse_init (GstBaseVideoParse * base_video_parse,
   base_video_parse->input_adapter = gst_adapter_new ();
   base_video_parse->output_adapter = gst_adapter_new ();
 
+  base_video_parse->caps = NULL;
+  base_video_parse->pending_segs = NULL;
   base_video_parse->reorder_depth = 1;
 
   base_video_parse->current_frame =
