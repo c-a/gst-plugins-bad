@@ -113,13 +113,16 @@ gst_base_video_parse_init (GstBaseVideoParse * base_video_parse,
   gst_element_add_pad (GST_ELEMENT (base_video_parse),
       base_video_parse->srcpad);
 
+  /* SINK_PAD */
   pad = GST_BASE_VIDEO_PARSE_SINK_PAD (base_video_parse);
 
   gst_pad_set_chain_function (pad, gst_base_video_parse_chain);
   gst_pad_set_event_function (pad, gst_base_video_parse_sink_event);
 
+  /* SRC_PAD */
   pad = GST_BASE_VIDEO_PARSE_SRC_PAD (base_video_parse);
 
+  gst_pad_use_fixed_caps (pad);
   gst_pad_set_query_type_function (pad, gst_base_video_parse_get_query_types);
   gst_pad_set_query_function (pad, gst_base_video_parse_src_query);
   gst_pad_set_event_function (pad, gst_base_video_parse_src_event);
