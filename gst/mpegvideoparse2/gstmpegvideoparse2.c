@@ -231,8 +231,10 @@ gst_mvp2_handle_picture (GstMpegVideoParse2 * mpegparse, GstBuffer * buffer)
   if (!mpeg_util_parse_picture_hdr (&hdr, buffer))
     return FALSE;
 
-  frame = gst_base_video_parse_get_frame (parse);
-  frame->presentation_frame_number = mpegparse->gop_start + hdr.tsn;
+  if (mpegparse->gop_start != -1) {
+    frame = gst_base_video_parse_get_frame (parse);
+    frame->presentation_frame_number = mpegparse->gop_start + hdr.tsn;
+  }
 
   return TRUE;
 }
@@ -391,6 +393,15 @@ gst_mvp2_stop (GstBaseVideoParse * parse)
 }
 
 static void
+gst_mvp2_flush (GstBaseVideoParse * parse)
+{
+  GstMpegVideoParse2 *mpegparse = GST_MPEG_VIDEO_PARSE2 (parse);
+
+  mpegparse->prev_packet = 0;
+  mpegparse->gop_start = -1;
+}
+
+static void
 gst_mvp2_base_init (gpointer g_class)
 {
   GstElementClass *element_class = GST_ELEMENT_CLASS (g_class);
@@ -436,6 +447,7 @@ gst_mvp2_class_init (GstMpegVideoParse2Class * klass)
 
   baseparse_class->start = GST_DEBUG_FUNCPTR (gst_mvp2_start);
   baseparse_class->stop = GST_DEBUG_FUNCPTR (gst_mvp2_stop);
+  baseparse_class->flush = GST_DEBUG_FUNCPTR (gst_mvp2_flush);
 
   baseparse_class->scan_for_sync = GST_DEBUG_FUNCPTR (gst_mvp2_scan_for_sync);
   baseparse_class->scan_for_packet_end =

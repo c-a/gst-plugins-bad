@@ -141,6 +141,9 @@ gst_base_video_parse_init (GstBaseVideoParse * base_video_parse,
 static void
 gst_base_video_parse_flush (GstBaseVideoParse * base_video_parse)
 {
+  GstBaseVideoParseClass *klass =
+      GST_BASE_VIDEO_PARSE_GET_CLASS (base_video_parse);
+
   if (gst_adapter_available (base_video_parse->input_adapter)) {
     gst_base_video_parse_add_to_frame (base_video_parse,
         gst_adapter_take_buffer (base_video_parse->input_adapter,
@@ -153,6 +156,9 @@ gst_base_video_parse_flush (GstBaseVideoParse * base_video_parse)
   base_video_parse->have_sync = FALSE;
   base_video_parse->presentation_timestamp = GST_CLOCK_TIME_NONE;
   base_video_parse->next_offset = GST_BUFFER_OFFSET_NONE;
+
+  if (klass->flush)
+    klass->flush (base_video_parse);
 }
 
 static void

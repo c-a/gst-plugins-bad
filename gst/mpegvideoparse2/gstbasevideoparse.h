@@ -117,7 +117,9 @@ struct _GstBaseVideoParseClass
   gboolean      (*start)               (GstBaseVideoParse *parse);
   gboolean      (*stop)                (GstBaseVideoParse *parse);
 
-  gint           (*scan_for_sync)       (GstAdapter *adapter, gboolean at_eos,
+  void          (*flush)               (GstBaseVideoParse *parse);
+
+  gint          (*scan_for_sync)       (GstAdapter *adapter, gboolean at_eos,
                                         gint offset, gint n);
   
   GstFlowReturn (*scan_for_packet_end) (GstBaseVideoParse *parse,
