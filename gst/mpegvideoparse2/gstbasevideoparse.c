@@ -599,8 +599,6 @@ gst_base_video_parse_drain (GstBaseVideoParse * parse, gboolean at_eos)
     }
   }
 
-  /* FIXME check klass->parse_data */
-
   ret = klass->scan_for_packet_end (parse, parse->input_adapter, &next);
   while (ret == GST_FLOW_OK) {
     GstBuffer *buffer;
