@@ -205,19 +205,6 @@ gst_base_video_parse_finalize (GObject * object)
   G_OBJECT_CLASS (parent_class)->finalize (object);
 }
 
-static const GstQueryType *
-gst_base_video_parse_get_query_types (GstPad * pad)
-{
-  static const GstQueryType query_types[] = {
-    GST_QUERY_POSITION,
-    GST_QUERY_DURATION,
-    GST_QUERY_CONVERT,
-    0
-  };
-
-  return query_types;
-}
-
 static gint64
 gst_base_video_parse_get_frame_number (GstBaseVideoParse * base_video_parse,
     GstClockTime timestamp)
@@ -283,6 +270,19 @@ gst_base_video_parse_convert (GstPad * pad,
   gst_object_unref (parse);
 
   return res;
+}
+
+static const GstQueryType *
+gst_base_video_parse_get_query_types (GstPad * pad)
+{
+  static const GstQueryType query_types[] = {
+    GST_QUERY_POSITION,
+    GST_QUERY_DURATION,
+    GST_QUERY_CONVERT,
+    0
+  };
+
+  return query_types;
 }
 
 static gboolean
