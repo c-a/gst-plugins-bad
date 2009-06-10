@@ -417,28 +417,6 @@ gst_base_video_parse_src_event (GstPad * pad, GstEvent * event)
 
       break;
     }
-#if 0
-    case GST_EVENT_QOS:
-    {
-      gdouble proportion;
-      GstClockTimeDiff diff;
-      GstClockTime timestamp;
-
-      gst_event_parse_qos (event, &proportion, &diff, &timestamp);
-
-      GST_OBJECT_LOCK (base_video_parse);
-      base_video_parse->proportion = proportion;
-      base_video_parse->earliest_time = timestamp + diff;
-      GST_OBJECT_UNLOCK (base_video_parse);
-
-      GST_DEBUG_OBJECT (base_video_parse,
-          "got QoS %" GST_TIME_FORMAT ", %" G_GINT64_FORMAT,
-          GST_TIME_ARGS (timestamp), diff);
-
-      res = gst_pad_push_event (base_video_parse->sinkpad, event);
-      break;
-    }
-#endif
     default:
       res = gst_pad_event_default (pad, event);
       break;
