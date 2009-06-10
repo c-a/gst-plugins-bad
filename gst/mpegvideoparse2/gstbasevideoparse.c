@@ -129,13 +129,6 @@ gst_base_video_parse_init (GstBaseVideoParse * base_video_parse,
 
   base_video_parse->input_adapter = gst_adapter_new ();
   base_video_parse->output_adapter = gst_adapter_new ();
-
-  base_video_parse->caps = NULL;
-  base_video_parse->pending_segs = NULL;
-  base_video_parse->reorder_depth = 1;
-
-  base_video_parse->current_frame =
-      gst_base_video_parse_new_frame (base_video_parse);
 }
 
 static void
@@ -510,7 +503,10 @@ gst_base_video_parse_start (GstBaseVideoParse * base_video_parse)
   base_video_parse->presentation_timestamp = 0;
   base_video_parse->next_offset = GST_BUFFER_OFFSET_NONE;
 
+  base_video_parse->reorder_depth = 1;
+
   base_video_parse->caps = NULL;
+  base_video_parse->pending_segs = NULL;
 
   gst_segment_init (&base_video_parse->state.segment, GST_FORMAT_TIME);
 
