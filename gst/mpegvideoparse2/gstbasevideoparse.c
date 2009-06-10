@@ -289,7 +289,7 @@ gst_base_video_parse_src_query (GstPad * pad, GstQuery * query)
     case GST_QUERY_DURATION:
     {
       GstFormat format;
-      gint64 value;
+      gint64 duration;
 
       /* see if upstream can handle it */
       res = gst_pad_query_default (pad, query);
@@ -298,13 +298,16 @@ gst_base_video_parse_src_query (GstPad * pad, GstQuery * query)
 
       gst_query_parse_duration (query, &format, NULL);
 
-#if 0
-      if (format == GST_FORMAT_DEFAULT || format == GST_FORMAT_TIME)
-        res = gst_base_video_parse_get_duration (parse, format, &value);
-#endif
-      res = FALSE;
+      if (GST_CLOCK_TIME_IS_VALID (base_parse->duration) &&
+          format == base_parse->duration_fmt) {
+        duration = base_parse->duration;
+        res = TRUE;
+      } else if (GST_CLOCK_TIME_IS_VALID (base_parse->duration))
+        res = gst_base_video_parse_convert (pad,
+            base_parse->duration_fmt, base_parse->duration, &format, &duration);
+
       if (res)
-        gst_query_set_position (query, format, value);
+        gst_query_set_position (query, format, duration);
 
       break;
     }
@@ -504,6 +507,8 @@ gst_base_video_parse_start (GstBaseVideoParse * base_video_parse)
   base_video_parse->next_offset = GST_BUFFER_OFFSET_NONE;
 
   base_video_parse->reorder_depth = 1;
+
+  base_video_parse->duration = GST_CLOCK_TIME_NONE;
 
   base_video_parse->caps = NULL;
   base_video_parse->pending_segs = NULL;
@@ -915,6 +920,24 @@ gst_base_video_parse_push (GstBaseVideoParse * base_video_parse,
   }
 
   return gst_pad_push (GST_BASE_VIDEO_PARSE_SRC_PAD (base_video_parse), buffer);
+}
+
+void
+gst_base_video_parse_set_duration (GstBaseVideoParse * base_video_parse,
+    GstFormat format, gint64 duration)
+{
+  g_return_if_fail (GST_IS_BASE_VIDEO_PARSE (base_video_parse));
+
+  if (duration != base_video_parse->duration) {
+    GstMessage *m;
+
+    m = gst_message_new_duration (GST_OBJECT (base_video_parse), format,
+        duration);
+    gst_element_post_message (GST_ELEMENT (base_video_parse), m);
+  }
+
+  base_video_parse->duration = duration;
+  base_video_parse->duration_fmt = format;
 }
 
 static void

@@ -108,6 +108,9 @@ struct _GstBaseVideoParse
 
   GstClockTime input_buffer_timestamp;
   GstClockTime upstream_timestamp;
+
+  GstClockTime duration;
+  GstFormat duration_fmt;
 };
 
 struct _GstBaseVideoParseClass
@@ -156,6 +159,10 @@ GstFlowReturn  gst_base_video_parse_finish_frame (GstBaseVideoParse *base_video_
 void           gst_base_video_parse_set_sync_point (GstBaseVideoParse *base_video_parse);
 GstFlowReturn  gst_base_video_parse_push (GstBaseVideoParse *base_video_parse,
                                           GstBuffer *buffer);
+
+void
+gst_base_video_parse_set_duration (GstBaseVideoParse *base_video_parse, 
+                                   GstFormat format, gint64 duration);
 
 G_END_DECLS
 
