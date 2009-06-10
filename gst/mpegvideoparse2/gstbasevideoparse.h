@@ -103,7 +103,6 @@ struct _GstBaseVideoParse
 
   gboolean have_sync;
   gboolean discont;
-  gboolean started;
   gboolean eos;
 
   GstVideoFrame *current_frame;
