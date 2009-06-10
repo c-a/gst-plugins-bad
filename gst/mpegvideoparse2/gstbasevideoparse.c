@@ -498,7 +498,6 @@ gst_base_video_parse_sink_event (GstPad * pad, GstEvent * event)
           rate, GST_FORMAT_TIME, start, stop, time);
 
       if (base_video_parse->caps) {
-        GST_WARNING ("ADSASD");
         res =
             gst_pad_push_event (GST_BASE_VIDEO_PARSE_SRC_PAD (base_video_parse),
             event);
@@ -730,9 +729,10 @@ gst_base_video_parse_finish_frame (GstBaseVideoParse * base_video_parse)
         gst_adapter_take_buffer (base_video_parse->output_adapter,
         gst_adapter_available (base_video_parse->output_adapter));
 
-    /* set duration */
-    frame->presentation_duration = gst_util_uint64_scale (GST_SECOND,
-        base_video_parse->state.fps_d, base_video_parse->state.fps_n);
+    if (!GST_CLOCK_TIME_IS_VALID (frame->presentation_duration)) {
+      frame->presentation_duration = gst_util_uint64_scale (GST_SECOND,
+          base_video_parse->state.fps_d, base_video_parse->state.fps_n);
+    }
 
     /* we prefer timestamps coming from upstream */
     if (GST_CLOCK_TIME_IS_VALID (upstream_timestamp)
@@ -828,6 +828,7 @@ gst_base_video_parse_new_frame (GstBaseVideoParse * base_video_parse)
 
   frame = g_malloc0 (sizeof (GstVideoFrame));
 
+  frame->presentation_duration = GST_CLOCK_TIME_NONE;
   frame->presentation_timestamp = GST_CLOCK_TIME_NONE;
   frame->presentation_frame_number = -1;
 
