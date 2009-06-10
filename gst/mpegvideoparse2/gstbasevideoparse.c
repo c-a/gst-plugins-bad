@@ -162,38 +162,6 @@ gst_base_video_parse_flush (GstBaseVideoParse * base_video_parse)
 }
 
 static void
-gst_base_video_parse_reset (GstBaseVideoParse * base_video_parse)
-{
-  GST_DEBUG ("reset");
-
-  base_video_parse->eos = FALSE;
-  base_video_parse->discont = TRUE;
-  base_video_parse->have_sync = FALSE;
-
-  base_video_parse->system_frame_number = 0;
-  base_video_parse->presentation_timestamp = 0;
-  base_video_parse->next_offset = GST_BUFFER_OFFSET_NONE;
-
-  if (base_video_parse->caps) {
-    gst_caps_unref (base_video_parse->caps);
-    base_video_parse->caps = NULL;
-  }
-
-  gst_base_video_parse_clear_pending_segs (base_video_parse);
-
-  gst_segment_init (&base_video_parse->state.segment, GST_FORMAT_TIME);
-  gst_adapter_clear (base_video_parse->input_adapter);
-  gst_adapter_clear (base_video_parse->output_adapter);
-
-  if (base_video_parse->current_frame) {
-    gst_base_video_parse_free_frame (base_video_parse->current_frame);
-  }
-  base_video_parse->current_frame =
-      gst_base_video_parse_new_frame (base_video_parse);
-
-}
-
-static void
 gst_base_video_parse_finalize (GObject * object)
 {
   GstBaseVideoParse *base_video_parse;
@@ -527,6 +495,58 @@ newseg_wrong_rate:
   goto done;
 }
 
+static gboolean
+gst_base_video_parse_start (GstBaseVideoParse * base_video_parse)
+{
+  GstBaseVideoParseClass *klass =
+      GST_BASE_VIDEO_PARSE_GET_CLASS (base_video_parse);
+  gboolean res = TRUE;
+
+  base_video_parse->eos = FALSE;
+  base_video_parse->discont = TRUE;
+  base_video_parse->have_sync = FALSE;
+
+  base_video_parse->system_frame_number = 0;
+  base_video_parse->presentation_timestamp = 0;
+  base_video_parse->next_offset = GST_BUFFER_OFFSET_NONE;
+
+  base_video_parse->caps = NULL;
+
+  gst_segment_init (&base_video_parse->state.segment, GST_FORMAT_TIME);
+
+  base_video_parse->current_frame =
+      gst_base_video_parse_new_frame (base_video_parse);
+
+  if (klass->start)
+    res = klass->start (base_video_parse);
+
+  return res;
+}
+
+static gboolean
+gst_base_video_parse_stop (GstBaseVideoParse * base_video_parse)
+{
+  GstBaseVideoParseClass *klass =
+      GST_BASE_VIDEO_PARSE_GET_CLASS (base_video_parse);
+  gboolean res = TRUE;
+
+  if (base_video_parse->caps)
+    gst_caps_unref (base_video_parse->caps);
+
+  gst_base_video_parse_clear_pending_segs (base_video_parse);
+
+  gst_adapter_clear (base_video_parse->input_adapter);
+  gst_adapter_clear (base_video_parse->output_adapter);
+
+  if (base_video_parse->current_frame)
+    gst_base_video_parse_free_frame (base_video_parse->current_frame);
+
+  if (klass->stop)
+    res = klass->stop (base_video_parse);
+
+  return res;
+}
+
 static GstStateChangeReturn
 gst_base_video_parse_change_state (GstElement * element,
     GstStateChange transition)
@@ -538,7 +558,7 @@ gst_base_video_parse_change_state (GstElement * element,
     case GST_STATE_CHANGE_NULL_TO_READY:
       break;
     case GST_STATE_CHANGE_READY_TO_PAUSED:
-      gst_base_video_parse_reset (base_parse);
+      gst_base_video_parse_start (base_parse);
       break;
     case GST_STATE_CHANGE_PAUSED_TO_PLAYING:
       break;
@@ -552,7 +572,7 @@ gst_base_video_parse_change_state (GstElement * element,
     case GST_STATE_CHANGE_PLAYING_TO_PAUSED:
       break;
     case GST_STATE_CHANGE_PAUSED_TO_READY:
-      gst_base_video_parse_reset (base_parse);
+      gst_base_video_parse_stop (base_parse);
       break;
     case GST_STATE_CHANGE_READY_TO_NULL:
       break;
