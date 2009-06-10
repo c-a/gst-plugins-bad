@@ -82,6 +82,9 @@ struct _GstBaseVideoParse
   /*< private >*/
   GstPad *sinkpad;
   GstPad *srcpad;
+
+  GstCaps *caps;
+  GSList *pending_segs;
   
   GstAdapter *input_adapter;
   GstAdapter *output_adapter;
@@ -89,6 +92,7 @@ struct _GstBaseVideoParse
   GstVideoState state;
   
   gint reorder_depth;
+  gint64 timestamp_offset;
 
   gboolean have_sync;
   gboolean discont;
@@ -98,21 +102,12 @@ struct _GstBaseVideoParse
   GstVideoFrame *current_frame;
   gint distance_from_sync;
 
-  GSList *pending_segs;
-
-  gboolean sink_clipping;
-
   guint64 presentation_timestamp;
   guint64 system_frame_number;
   guint64 next_offset;
 
-  GstCaps *caps;
-  gboolean set_output_caps;
-
   GstClockTime input_buffer_timestamp;
   GstClockTime upstream_timestamp;
-
-  gint64 timestamp_offset;
 };
 
 struct _GstBaseVideoParseClass
