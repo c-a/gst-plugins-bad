@@ -139,16 +139,34 @@ gst_base_video_parse_init (GstBaseVideoParse * base_video_parse,
 }
 
 static void
+gst_base_video_parse_flush (GstBaseVideoParse * base_video_parse)
+{
+  if (gst_adapter_available (base_video_parse->input_adapter)) {
+    gst_base_video_parse_add_to_frame (base_video_parse,
+        gst_adapter_take_buffer (base_video_parse->input_adapter,
+            gst_adapter_available (base_video_parse->input_adapter)));
+  }
+
+  gst_base_video_parse_finish_frame (base_video_parse);
+
+  base_video_parse->discont = TRUE;
+  base_video_parse->have_sync = FALSE;
+  base_video_parse->presentation_timestamp = GST_CLOCK_TIME_NONE;
+  base_video_parse->next_offset = GST_BUFFER_OFFSET_NONE;
+}
+
+static void
 gst_base_video_parse_reset (GstBaseVideoParse * base_video_parse)
 {
   GST_DEBUG ("reset");
 
+  base_video_parse->eos = FALSE;
   base_video_parse->discont = TRUE;
   base_video_parse->have_sync = FALSE;
-  base_video_parse->eos = FALSE;
 
   base_video_parse->system_frame_number = 0;
   base_video_parse->presentation_timestamp = 0;
+  base_video_parse->next_offset = GST_BUFFER_OFFSET_NONE;
 
   if (base_video_parse->caps) {
     gst_caps_unref (base_video_parse->caps);
@@ -320,6 +338,7 @@ gst_base_video_parse_src_query (GstPad * pad, GstQuery * query)
         res = gst_base_video_parse_get_duration (parse, format, &value);
 #endif
       res = FALSE;
+      GST_WARNING ("ASDASD");
       if (res)
         gst_query_set_position (query, format, value);
 
@@ -451,7 +470,7 @@ gst_base_video_parse_sink_event (GstPad * pad, GstEvent * event)
 
   switch (GST_EVENT_TYPE (event)) {
     case GST_EVENT_FLUSH_STOP:
-      gst_base_video_parse_reset (base_video_parse);
+      gst_base_video_parse_flush (base_video_parse);
       res =
           gst_pad_push_event (GST_BASE_VIDEO_PARSE_SRC_PAD (base_video_parse),
           event);
@@ -460,12 +479,7 @@ gst_base_video_parse_sink_event (GstPad * pad, GstEvent * event)
     {
       GST_DEBUG ("EOS");
 
-      if (gst_adapter_available (base_video_parse->input_adapter)) {
-        gst_base_video_parse_add_to_frame (base_video_parse,
-            gst_adapter_take_buffer (base_video_parse->input_adapter,
-                gst_adapter_available (base_video_parse->input_adapter)));
-        gst_base_video_parse_finish_frame (base_video_parse);
-      }
+      gst_base_video_parse_flush (base_video_parse);
 
       res =
           gst_pad_push_event (GST_BASE_VIDEO_PARSE_SRC_PAD (base_video_parse),
@@ -636,6 +650,7 @@ gst_base_video_parse_chain (GstPad * pad, GstBuffer * buf)
 {
   GstBaseVideoParse *base_video_parse;
   GstBaseVideoParseClass *klass;
+  gboolean discont = FALSE;
 
   GST_DEBUG ("chain with %d bytes", GST_BUFFER_SIZE (buf));
 
@@ -647,11 +662,27 @@ gst_base_video_parse_chain (GstPad * pad, GstBuffer * buf)
     base_video_parse->started = TRUE;
   }
 
-  if (G_UNLIKELY (GST_BUFFER_FLAG_IS_SET (buf, GST_BUFFER_FLAG_DISCONT))) {
+  /* If we have an offset, and the incoming offset doesn't match, 
+     or we have a discont, handle it first by flushing out data
+     we have collected. */
+  if (base_video_parse->next_offset != GST_BUFFER_OFFSET_NONE) {
+    if (GST_BUFFER_OFFSET_IS_VALID (buf)) {
+      if (base_video_parse->next_offset != GST_BUFFER_OFFSET (buf))
+        discont = TRUE;
+      base_video_parse->next_offset =
+          GST_BUFFER_OFFSET (buf) + GST_BUFFER_SIZE (buf);
+    } else {
+      base_video_parse->next_offset =
+          base_video_parse->next_offset + GST_BUFFER_SIZE (buf);
+    }
+  }
+
+  if (G_UNLIKELY (GST_BUFFER_FLAG_IS_SET (buf, GST_BUFFER_FLAG_DISCONT)))
+    discont = TRUE;
+
+  if (discont) {
     GST_DEBUG_OBJECT (base_video_parse, "received DISCONT buffer");
-    gst_base_video_parse_reset (base_video_parse);
-    base_video_parse->discont = TRUE;
-    base_video_parse->have_sync = FALSE;
+    gst_base_video_parse_flush (base_video_parse);
   }
 
   GST_DEBUG ("upstream timestamp: %" GST_TIME_FORMAT,
@@ -725,76 +756,78 @@ gst_base_video_parse_finish_frame (GstBaseVideoParse * base_video_parse)
 
   base_video_parse_class = GST_BASE_VIDEO_PARSE_GET_CLASS (base_video_parse);
 
-  upstream_timestamp = base_video_parse->upstream_timestamp;
-  buffer =
-      gst_adapter_take_buffer (base_video_parse->output_adapter,
-      gst_adapter_available (base_video_parse->output_adapter));
+  if (gst_adapter_available (base_video_parse->output_adapter)) {
+    upstream_timestamp = base_video_parse->upstream_timestamp;
+    buffer =
+        gst_adapter_take_buffer (base_video_parse->output_adapter,
+        gst_adapter_available (base_video_parse->output_adapter));
 
-  /* set duration */
-  frame->presentation_duration = gst_util_uint64_scale (GST_SECOND,
-      base_video_parse->state.fps_d, base_video_parse->state.fps_n);
+    /* set duration */
+    frame->presentation_duration = gst_util_uint64_scale (GST_SECOND,
+        base_video_parse->state.fps_d, base_video_parse->state.fps_n);
 
-  /* we prefer timestamps coming from upstream */
-  if (GST_CLOCK_TIME_IS_VALID (upstream_timestamp)
-      && upstream_timestamp != base_video_parse->presentation_timestamp) {
-    GST_DEBUG ("Got upstream timestamp");
-    frame->presentation_timestamp = base_video_parse->upstream_timestamp;
-  }
-
-  if (frame->is_sync_point) {
-    if (GST_CLOCK_TIME_IS_VALID (frame->presentation_timestamp)
-        && frame->presentation_frame_number != -1) {
-      base_video_parse->timestamp_offset =
-          frame->presentation_timestamp -
-          gst_util_uint64_scale (frame->presentation_frame_number,
-          base_video_parse->state.fps_d * GST_SECOND,
-          base_video_parse->state.fps_n);
-
-      base_video_parse->distance_from_sync = 0;
+    /* we prefer timestamps coming from upstream */
+    if (GST_CLOCK_TIME_IS_VALID (upstream_timestamp)
+        && upstream_timestamp != base_video_parse->presentation_timestamp) {
+      GST_DEBUG ("Got upstream timestamp");
+      frame->presentation_timestamp = base_video_parse->upstream_timestamp;
     }
 
-    else
-      GST_DEBUG ("subclass set frame as sync_point but didn't supply "
-          "presentation_timestamp and presentation_frame_number");
-  }
+    if (frame->is_sync_point) {
+      if (GST_CLOCK_TIME_IS_VALID (frame->presentation_timestamp)
+          && frame->presentation_frame_number != -1) {
+        base_video_parse->timestamp_offset =
+            frame->presentation_timestamp -
+            gst_util_uint64_scale (frame->presentation_frame_number,
+            base_video_parse->state.fps_d * GST_SECOND,
+            base_video_parse->state.fps_n);
 
-  /* calculate timestamp from frame number if we've got one */
-  if (frame->presentation_timestamp == GST_CLOCK_TIME_NONE
-      && frame->presentation_frame_number != -1) {
+        base_video_parse->distance_from_sync = 0;
+      }
 
-    frame->presentation_timestamp =
+      else
+        GST_DEBUG ("subclass set frame as sync_point but didn't supply "
+            "presentation_timestamp and presentation_frame_number");
+    }
+
+    /* calculate timestamp from frame number if we've got one */
+    if (frame->presentation_timestamp == GST_CLOCK_TIME_NONE
+        && frame->presentation_frame_number != -1) {
+
+      frame->presentation_timestamp =
+          gst_base_video_parse_get_timestamp (base_video_parse,
+          frame->presentation_frame_number);
+    }
+
+    base_video_parse->presentation_timestamp = frame->presentation_timestamp;
+    gst_segment_set_last_stop (&base_video_parse->state.segment,
+        GST_FORMAT_TIME, base_video_parse->presentation_timestamp);
+
+    frame->distance_from_sync = base_video_parse->distance_from_sync;
+    base_video_parse->distance_from_sync++;
+
+    frame->decode_timestamp =
         gst_base_video_parse_get_timestamp (base_video_parse,
-        frame->presentation_frame_number);
+        frame->decode_frame_number);
+
+    GST_BUFFER_TIMESTAMP (buffer) = frame->presentation_timestamp;
+    GST_BUFFER_DURATION (buffer) = frame->presentation_duration;
+    if (frame->decode_frame_number < 0) {
+      GST_BUFFER_OFFSET (buffer) = 0;
+    } else {
+      GST_BUFFER_OFFSET (buffer) = frame->decode_timestamp;
+    }
+    GST_BUFFER_OFFSET_END (buffer) = GST_CLOCK_TIME_NONE;
+
+    if (frame->is_sync_point) {
+      GST_BUFFER_FLAG_UNSET (buffer, GST_BUFFER_FLAG_DELTA_UNIT);
+    } else {
+      GST_BUFFER_FLAG_SET (buffer, GST_BUFFER_FLAG_DELTA_UNIT);
+    }
+
+    frame->src_buffer = buffer;
+    ret = base_video_parse_class->shape_output (base_video_parse, frame);
   }
-
-  base_video_parse->presentation_timestamp = frame->presentation_timestamp;
-  gst_segment_set_last_stop (&base_video_parse->state.segment, GST_FORMAT_TIME,
-      base_video_parse->presentation_timestamp);
-
-  frame->distance_from_sync = base_video_parse->distance_from_sync;
-  base_video_parse->distance_from_sync++;
-
-  frame->decode_timestamp =
-      gst_base_video_parse_get_timestamp (base_video_parse,
-      frame->decode_frame_number);
-
-  GST_BUFFER_TIMESTAMP (buffer) = frame->presentation_timestamp;
-  GST_BUFFER_DURATION (buffer) = frame->presentation_duration;
-  if (frame->decode_frame_number < 0) {
-    GST_BUFFER_OFFSET (buffer) = 0;
-  } else {
-    GST_BUFFER_OFFSET (buffer) = frame->decode_timestamp;
-  }
-  GST_BUFFER_OFFSET_END (buffer) = GST_CLOCK_TIME_NONE;
-
-  if (frame->is_sync_point) {
-    GST_BUFFER_FLAG_UNSET (buffer, GST_BUFFER_FLAG_DELTA_UNIT);
-  } else {
-    GST_BUFFER_FLAG_SET (buffer, GST_BUFFER_FLAG_DELTA_UNIT);
-  }
-
-  frame->src_buffer = buffer;
-  ret = base_video_parse_class->shape_output (base_video_parse, frame);
 
   gst_base_video_parse_free_frame (base_video_parse->current_frame);
 

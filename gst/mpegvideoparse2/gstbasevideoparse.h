@@ -86,6 +86,8 @@ struct _GstBaseVideoParse
   GstAdapter *input_adapter;
   GstAdapter *output_adapter;
 
+  GstVideoState state;
+  
   gint reorder_depth;
 
   gboolean have_sync;
@@ -94,7 +96,6 @@ struct _GstBaseVideoParse
   gboolean eos;
 
   GstVideoFrame *current_frame;
-  GstVideoState state;
   gint distance_from_sync;
 
   GSList *pending_segs;
@@ -103,6 +104,7 @@ struct _GstBaseVideoParse
 
   guint64 presentation_timestamp;
   guint64 system_frame_number;
+  guint64 next_offset;
 
   GstCaps *caps;
   gboolean set_output_caps;
