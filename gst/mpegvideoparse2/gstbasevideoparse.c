@@ -51,21 +51,18 @@ static GstStateChangeReturn gst_base_video_parse_change_state (GstElement *
 static GstFlowReturn gst_base_video_parse_chain (GstPad * pad, GstBuffer * buf);
 static void gst_base_video_parse_free_frame (GstVideoFrame * frame);
 static GstVideoFrame *gst_base_video_parse_new_frame (GstBaseVideoParse *
-    base_video_parse);
+    parse);
 static GstFlowReturn
-gst_base_video_parse_drain (GstBaseVideoParse * base_video_parse,
-    gboolean at_eos);
+gst_base_video_parse_drain (GstBaseVideoParse * parse, gboolean at_eos);
 
 static void
-gst_base_video_parse_add_to_frame (GstBaseVideoParse * base_video_parse,
+gst_base_video_parse_add_to_frame (GstBaseVideoParse * parse,
     GstBuffer * buffer);
 static GstFlowReturn
-gst_base_video_parse_finish_frame (GstBaseVideoParse * base_video_parse);
+gst_base_video_parse_finish_frame (GstBaseVideoParse * parse);
 
-static void
-gst_base_video_parse_send_pending_segs (GstBaseVideoParse * base_video_parse);
-static void
-gst_base_video_parse_clear_pending_segs (GstBaseVideoParse * base_video_parse);
+static void gst_base_video_parse_send_pending_segs (GstBaseVideoParse * parse);
+static void gst_base_video_parse_clear_pending_segs (GstBaseVideoParse * parse);
 
 #define _do_init(bla) \
     GST_DEBUG_CATEGORY_INIT (gst_basevideoparse_debug, "basevideoparse", 0, \
@@ -95,7 +92,7 @@ gst_base_video_parse_class_init (GstBaseVideoParseClass * klass)
 }
 
 static void
-gst_base_video_parse_init (GstBaseVideoParse * base_video_parse,
+gst_base_video_parse_init (GstBaseVideoParse * parse,
     GstBaseVideoParseClass * klass)
 {
   GstPadTemplate *pad_template;
@@ -107,102 +104,97 @@ gst_base_video_parse_init (GstBaseVideoParse * base_video_parse,
       gst_element_class_get_pad_template (GST_ELEMENT_CLASS (klass), "sink");
   g_return_if_fail (pad_template != NULL);
 
-  base_video_parse->sinkpad = gst_pad_new_from_template (pad_template, "sink");
-  gst_element_add_pad (GST_ELEMENT (base_video_parse),
-      base_video_parse->sinkpad);
+  parse->sinkpad = gst_pad_new_from_template (pad_template, "sink");
+  gst_element_add_pad (GST_ELEMENT (parse), parse->sinkpad);
 
   pad_template =
       gst_element_class_get_pad_template (GST_ELEMENT_CLASS (klass), "src");
   g_return_if_fail (pad_template != NULL);
 
-  base_video_parse->srcpad = gst_pad_new_from_template (pad_template, "src");
-  gst_element_add_pad (GST_ELEMENT (base_video_parse),
-      base_video_parse->srcpad);
+  parse->srcpad = gst_pad_new_from_template (pad_template, "src");
+  gst_element_add_pad (GST_ELEMENT (parse), parse->srcpad);
 
   /* SINK_PAD */
-  pad = GST_BASE_VIDEO_PARSE_SINK_PAD (base_video_parse);
+  pad = GST_BASE_VIDEO_PARSE_SINK_PAD (parse);
 
   gst_pad_set_chain_function (pad, gst_base_video_parse_chain);
   gst_pad_set_event_function (pad, gst_base_video_parse_sink_event);
 
   /* SRC_PAD */
-  pad = GST_BASE_VIDEO_PARSE_SRC_PAD (base_video_parse);
+  pad = GST_BASE_VIDEO_PARSE_SRC_PAD (parse);
 
   gst_pad_use_fixed_caps (pad);
   gst_pad_set_query_type_function (pad, gst_base_video_parse_get_query_types);
   gst_pad_set_query_function (pad, gst_base_video_parse_src_query);
   gst_pad_set_event_function (pad, gst_base_video_parse_src_event);
 
-  base_video_parse->input_adapter = gst_adapter_new ();
-  base_video_parse->output_adapter = gst_adapter_new ();
+  parse->input_adapter = gst_adapter_new ();
+  parse->output_adapter = gst_adapter_new ();
 }
 
 static void
-gst_base_video_parse_flush (GstBaseVideoParse * base_video_parse)
+gst_base_video_parse_flush (GstBaseVideoParse * parse)
 {
-  GstBaseVideoParseClass *klass =
-      GST_BASE_VIDEO_PARSE_GET_CLASS (base_video_parse);
+  GstBaseVideoParseClass *klass = GST_BASE_VIDEO_PARSE_GET_CLASS (parse);
 
-  if (gst_adapter_available (base_video_parse->input_adapter)) {
-    gst_base_video_parse_add_to_frame (base_video_parse,
-        gst_adapter_take_buffer (base_video_parse->input_adapter,
-            gst_adapter_available (base_video_parse->input_adapter)));
+  if (gst_adapter_available (parse->input_adapter)) {
+    gst_base_video_parse_add_to_frame (parse,
+        gst_adapter_take_buffer (parse->input_adapter,
+            gst_adapter_available (parse->input_adapter)));
   }
 
-  gst_base_video_parse_finish_frame (base_video_parse);
+  gst_base_video_parse_finish_frame (parse);
 
-  base_video_parse->discont = TRUE;
-  base_video_parse->have_sync = FALSE;
-  base_video_parse->presentation_timestamp = GST_CLOCK_TIME_NONE;
-  base_video_parse->next_offset = GST_BUFFER_OFFSET_NONE;
+  parse->discont = TRUE;
+  parse->have_sync = FALSE;
+  parse->presentation_timestamp = GST_CLOCK_TIME_NONE;
+  parse->next_offset = GST_BUFFER_OFFSET_NONE;
 
   if (klass->flush)
-    klass->flush (base_video_parse);
+    klass->flush (parse);
 }
 
 static void
 gst_base_video_parse_finalize (GObject * object)
 {
-  GstBaseVideoParse *base_video_parse;
+  GstBaseVideoParse *parse;
 
   g_return_if_fail (GST_IS_BASE_VIDEO_PARSE (object));
-  base_video_parse = GST_BASE_VIDEO_PARSE (object);
+  parse = GST_BASE_VIDEO_PARSE (object);
 
-  if (base_video_parse->input_adapter) {
-    g_object_unref (base_video_parse->input_adapter);
+  if (parse->input_adapter) {
+    g_object_unref (parse->input_adapter);
   }
-  if (base_video_parse->output_adapter) {
-    g_object_unref (base_video_parse->output_adapter);
+  if (parse->output_adapter) {
+    g_object_unref (parse->output_adapter);
   }
 
   G_OBJECT_CLASS (parent_class)->finalize (object);
 }
 
 static gint64
-gst_base_video_parse_get_frame_number (GstBaseVideoParse * base_video_parse,
+gst_base_video_parse_get_frame_number (GstBaseVideoParse * parse,
     GstClockTime timestamp)
 {
-  GstVideoFrame *frame = base_video_parse->current_frame;
+  GstVideoFrame *frame = parse->current_frame;
 
   return gst_util_uint64_scale (frame->presentation_timestamp
-      - base_video_parse->timestamp_offset, base_video_parse->state.fps_n,
-      base_video_parse->state.fps_d * GST_SECOND);
+      - parse->timestamp_offset, parse->state.fps_n,
+      parse->state.fps_d * GST_SECOND);
 }
 
 static GstClockTime
-gst_base_video_parse_get_timestamp (GstBaseVideoParse * base_video_parse,
+gst_base_video_parse_get_timestamp (GstBaseVideoParse * parse,
     gint64 picture_number)
 {
   if (picture_number < 0) {
-    return base_video_parse->timestamp_offset -
+    return parse->timestamp_offset -
         (gint64) gst_util_uint64_scale (-picture_number,
-        base_video_parse->state.fps_d * GST_SECOND,
-        base_video_parse->state.fps_n);
+        parse->state.fps_d * GST_SECOND, parse->state.fps_n);
   } else {
-    return base_video_parse->timestamp_offset +
+    return parse->timestamp_offset +
         gst_util_uint64_scale (picture_number,
-        base_video_parse->state.fps_d * GST_SECOND,
-        base_video_parse->state.fps_n);
+        parse->state.fps_d * GST_SECOND, parse->state.fps_n);
   }
 }
 
@@ -261,10 +253,10 @@ gst_base_video_parse_get_query_types (GstPad * pad)
 static gboolean
 gst_base_video_parse_src_query (GstPad * pad, GstQuery * query)
 {
-  GstBaseVideoParse *base_parse;
+  GstBaseVideoParse *parse;
   gboolean res = FALSE;
 
-  base_parse = GST_BASE_VIDEO_PARSE (gst_pad_get_parent (pad));
+  parse = GST_BASE_VIDEO_PARSE (gst_pad_get_parent (pad));
 
   switch (GST_QUERY_TYPE (query)) {
     case GST_QUERY_POSITION:
@@ -281,8 +273,8 @@ gst_base_video_parse_src_query (GstPad * pad, GstQuery * query)
       gst_query_parse_position (query, &format, NULL);
 
       if (format == GST_FORMAT_DEFAULT || format == GST_FORMAT_TIME) {
-        time = gst_segment_to_stream_time (&base_parse->state.segment,
-            GST_FORMAT_TIME, base_parse->state.segment.last_stop);
+        time = gst_segment_to_stream_time (&parse->state.segment,
+            GST_FORMAT_TIME, parse->state.segment.last_stop);
         GST_DEBUG ("query position %" GST_TIME_FORMAT, GST_TIME_ARGS (time));
         res = gst_base_video_parse_convert (pad, GST_FORMAT_TIME, time, &format,
             &value);
@@ -304,13 +296,13 @@ gst_base_video_parse_src_query (GstPad * pad, GstQuery * query)
 
       gst_query_parse_duration (query, &format, NULL);
 
-      if (GST_CLOCK_TIME_IS_VALID (base_parse->duration) &&
-          format == base_parse->duration_fmt) {
-        duration = base_parse->duration;
+      if (GST_CLOCK_TIME_IS_VALID (parse->duration) &&
+          format == parse->duration_fmt) {
+        duration = parse->duration;
         res = TRUE;
-      } else if (GST_CLOCK_TIME_IS_VALID (base_parse->duration))
+      } else if (GST_CLOCK_TIME_IS_VALID (parse->duration))
         res = gst_base_video_parse_convert (pad,
-            base_parse->duration_fmt, base_parse->duration, &format, &duration);
+            parse->duration_fmt, parse->duration, &format, &duration);
 
       if (res)
         gst_query_set_position (query, format, duration);
@@ -342,7 +334,7 @@ gst_base_video_parse_src_query (GstPad * pad, GstQuery * query)
       break;
   }
 done:
-  gst_object_unref (base_parse);
+  gst_object_unref (parse);
 
   return res;
 }
@@ -350,10 +342,10 @@ done:
 static gboolean
 gst_base_video_parse_src_event (GstPad * pad, GstEvent * event)
 {
-  GstBaseVideoParse *base_video_parse;
+  GstBaseVideoParse *parse;
   gboolean res = FALSE;
 
-  base_video_parse = GST_BASE_VIDEO_PARSE (gst_pad_get_parent (pad));
+  parse = GST_BASE_VIDEO_PARSE (gst_pad_get_parent (pad));
 
   switch (GST_EVENT_TYPE (event)) {
     case GST_EVENT_SEEK:
@@ -367,9 +359,7 @@ gst_base_video_parse_src_event (GstPad * pad, GstEvent * event)
       gint64 tcur, tstop;
 
       /* see if upstream can handle it */
-      res =
-          gst_pad_push_event (GST_BASE_VIDEO_PARSE_SINK_PAD (base_video_parse),
-          event);
+      res = gst_pad_push_event (GST_BASE_VIDEO_PARSE_SINK_PAD (parse), event);
       if (res)
         goto done;
 
@@ -388,8 +378,7 @@ gst_base_video_parse_src_event (GstPad * pad, GstEvent * event)
           flags, cur_type, tcur, stop_type, tstop);
 
       res =
-          gst_pad_push_event (GST_BASE_VIDEO_PARSE_SINK_PAD (base_video_parse),
-          real_seek);
+          gst_pad_push_event (GST_BASE_VIDEO_PARSE_SINK_PAD (parse), real_seek);
 
       break;
     }
@@ -398,38 +387,34 @@ gst_base_video_parse_src_event (GstPad * pad, GstEvent * event)
       break;
   }
 done:
-  gst_object_unref (base_video_parse);
+  gst_object_unref (parse);
   return res;
 
 convert_error:
-  GST_DEBUG_OBJECT (base_video_parse, "could not convert format");
+  GST_DEBUG_OBJECT (parse, "could not convert format");
   goto done;
 }
 
 static gboolean
 gst_base_video_parse_sink_event (GstPad * pad, GstEvent * event)
 {
-  GstBaseVideoParse *base_video_parse;
+  GstBaseVideoParse *parse;
   gboolean res = FALSE;
 
-  base_video_parse = GST_BASE_VIDEO_PARSE (gst_pad_get_parent (pad));
+  parse = GST_BASE_VIDEO_PARSE (gst_pad_get_parent (pad));
 
   switch (GST_EVENT_TYPE (event)) {
     case GST_EVENT_FLUSH_STOP:
-      gst_base_video_parse_flush (base_video_parse);
-      res =
-          gst_pad_push_event (GST_BASE_VIDEO_PARSE_SRC_PAD (base_video_parse),
-          event);
+      gst_base_video_parse_flush (parse);
+      res = gst_pad_push_event (GST_BASE_VIDEO_PARSE_SRC_PAD (parse), event);
       break;
     case GST_EVENT_EOS:
     {
       GST_DEBUG ("EOS");
 
-      gst_base_video_parse_flush (base_video_parse);
+      gst_base_video_parse_flush (parse);
 
-      res =
-          gst_pad_push_event (GST_BASE_VIDEO_PARSE_SRC_PAD (base_video_parse),
-          event);
+      res = gst_pad_push_event (GST_BASE_VIDEO_PARSE_SRC_PAD (parse), event);
       break;
     }
     case GST_EVENT_NEWSEGMENT:
@@ -470,16 +455,13 @@ gst_base_video_parse_sink_event (GstPad * pad, GstEvent * event)
       }
 
       GST_DEBUG ("newsegment %lld %lld", start, time);
-      gst_segment_set_newsegment (&base_video_parse->state.segment, update,
+      gst_segment_set_newsegment (&parse->state.segment, update,
           rate, GST_FORMAT_TIME, start, stop, time);
 
-      if (base_video_parse->caps) {
-        res =
-            gst_pad_push_event (GST_BASE_VIDEO_PARSE_SRC_PAD (base_video_parse),
-            event);
+      if (parse->caps) {
+        res = gst_pad_push_event (GST_BASE_VIDEO_PARSE_SRC_PAD (parse), event);
       } else {
-        base_video_parse->pending_segs =
-            g_slist_append (base_video_parse->pending_segs, event);
+        parse->pending_segs = g_slist_append (parse->pending_segs, event);
         res = TRUE;
       }
       break;
@@ -489,67 +471,64 @@ gst_base_video_parse_sink_event (GstPad * pad, GstEvent * event)
       break;
   }
 done:
-  gst_object_unref (base_video_parse);
+  gst_object_unref (parse);
   return res;
 
 newseg_wrong_rate:
-  GST_DEBUG_OBJECT (base_video_parse, "negative rates not supported");
+  GST_DEBUG_OBJECT (parse, "negative rates not supported");
   goto done;
 }
 
 static gboolean
-gst_base_video_parse_start (GstBaseVideoParse * base_video_parse)
+gst_base_video_parse_start (GstBaseVideoParse * parse)
 {
-  GstBaseVideoParseClass *klass =
-      GST_BASE_VIDEO_PARSE_GET_CLASS (base_video_parse);
+  GstBaseVideoParseClass *klass = GST_BASE_VIDEO_PARSE_GET_CLASS (parse);
   gboolean res = TRUE;
 
-  base_video_parse->eos = FALSE;
-  base_video_parse->discont = TRUE;
-  base_video_parse->have_sync = FALSE;
+  parse->eos = FALSE;
+  parse->discont = TRUE;
+  parse->have_sync = FALSE;
 
-  base_video_parse->system_frame_number = 0;
-  base_video_parse->presentation_timestamp = 0;
-  base_video_parse->next_offset = GST_BUFFER_OFFSET_NONE;
+  parse->system_frame_number = 0;
+  parse->presentation_timestamp = 0;
+  parse->next_offset = GST_BUFFER_OFFSET_NONE;
 
-  base_video_parse->reorder_depth = 1;
+  parse->reorder_depth = 1;
 
-  base_video_parse->duration = GST_CLOCK_TIME_NONE;
+  parse->duration = GST_CLOCK_TIME_NONE;
 
-  base_video_parse->caps = NULL;
-  base_video_parse->pending_segs = NULL;
+  parse->caps = NULL;
+  parse->pending_segs = NULL;
 
-  gst_segment_init (&base_video_parse->state.segment, GST_FORMAT_TIME);
+  gst_segment_init (&parse->state.segment, GST_FORMAT_TIME);
 
-  base_video_parse->current_frame =
-      gst_base_video_parse_new_frame (base_video_parse);
+  parse->current_frame = gst_base_video_parse_new_frame (parse);
 
   if (klass->start)
-    res = klass->start (base_video_parse);
+    res = klass->start (parse);
 
   return res;
 }
 
 static gboolean
-gst_base_video_parse_stop (GstBaseVideoParse * base_video_parse)
+gst_base_video_parse_stop (GstBaseVideoParse * parse)
 {
-  GstBaseVideoParseClass *klass =
-      GST_BASE_VIDEO_PARSE_GET_CLASS (base_video_parse);
+  GstBaseVideoParseClass *klass = GST_BASE_VIDEO_PARSE_GET_CLASS (parse);
   gboolean res = TRUE;
 
-  if (base_video_parse->caps)
-    gst_caps_unref (base_video_parse->caps);
+  if (parse->caps)
+    gst_caps_unref (parse->caps);
 
-  gst_base_video_parse_clear_pending_segs (base_video_parse);
+  gst_base_video_parse_clear_pending_segs (parse);
 
-  gst_adapter_clear (base_video_parse->input_adapter);
-  gst_adapter_clear (base_video_parse->output_adapter);
+  gst_adapter_clear (parse->input_adapter);
+  gst_adapter_clear (parse->output_adapter);
 
-  if (base_video_parse->current_frame)
-    gst_base_video_parse_free_frame (base_video_parse->current_frame);
+  if (parse->current_frame)
+    gst_base_video_parse_free_frame (parse->current_frame);
 
   if (klass->stop)
-    res = klass->stop (base_video_parse);
+    res = klass->stop (parse);
 
   return res;
 }
@@ -558,14 +537,14 @@ static GstStateChangeReturn
 gst_base_video_parse_change_state (GstElement * element,
     GstStateChange transition)
 {
-  GstBaseVideoParse *base_parse = GST_BASE_VIDEO_PARSE (element);
+  GstBaseVideoParse *parse = GST_BASE_VIDEO_PARSE (element);
   GstStateChangeReturn ret;
 
   switch (transition) {
     case GST_STATE_CHANGE_NULL_TO_READY:
       break;
     case GST_STATE_CHANGE_READY_TO_PAUSED:
-      gst_base_video_parse_start (base_parse);
+      gst_base_video_parse_start (parse);
       break;
     case GST_STATE_CHANGE_PAUSED_TO_PLAYING:
       break;
@@ -579,7 +558,7 @@ gst_base_video_parse_change_state (GstElement * element,
     case GST_STATE_CHANGE_PLAYING_TO_PAUSED:
       break;
     case GST_STATE_CHANGE_PAUSED_TO_READY:
-      gst_base_video_parse_stop (base_parse);
+      gst_base_video_parse_stop (parse);
       break;
     case GST_STATE_CHANGE_READY_TO_NULL:
       break;
@@ -591,56 +570,54 @@ gst_base_video_parse_change_state (GstElement * element,
 }
 
 static GstFlowReturn
-gst_base_video_parse_drain (GstBaseVideoParse * base_video_parse,
-    gboolean at_eos)
+gst_base_video_parse_drain (GstBaseVideoParse * parse, gboolean at_eos)
 {
   GstBaseVideoParseClass *klass;
   GstFlowReturn ret;
   gint next;
 
-  klass = GST_BASE_VIDEO_PARSE_GET_CLASS (base_video_parse);
+  klass = GST_BASE_VIDEO_PARSE_GET_CLASS (parse);
 
-  if (!base_video_parse->have_sync) {
+  if (!parse->have_sync) {
     gint n, m;
 
     GST_DEBUG ("no sync, scanning");
 
-    n = gst_adapter_available (base_video_parse->input_adapter);
-    m = klass->scan_for_sync (base_video_parse->input_adapter, at_eos, 0, n);
+    n = gst_adapter_available (parse->input_adapter);
+    m = klass->scan_for_sync (parse->input_adapter, at_eos, 0, n);
 
-    gst_adapter_flush (base_video_parse->input_adapter, m);
+    gst_adapter_flush (parse->input_adapter, m);
 
     if (m < n) {
       GST_DEBUG ("found possible sync after %d bytes (of %d)", m, n);
       /* this is only "maybe" sync */
-      base_video_parse->have_sync = TRUE;
+      parse->have_sync = TRUE;
     }
 
-    if (!base_video_parse->have_sync) {
+    if (!parse->have_sync) {
       return GST_FLOW_OK;
     }
   }
 
   /* FIXME check klass->parse_data */
 
-  ret = klass->scan_for_packet_end (base_video_parse,
-      base_video_parse->input_adapter, &next);
+  ret = klass->scan_for_packet_end (parse, parse->input_adapter, &next);
   while (ret == GST_FLOW_OK) {
     GstBuffer *buffer;
     GstBaseVideoParseReturn p_ret;
 
-    base_video_parse->input_buffer_timestamp =
-        GST_BUFFER_TIMESTAMP (base_video_parse->input_adapter->buflist->data);
-    buffer = gst_adapter_take_buffer (base_video_parse->input_adapter, next);
-    p_ret = klass->parse_data (base_video_parse, buffer);
+    parse->input_buffer_timestamp =
+        GST_BUFFER_TIMESTAMP (parse->input_adapter->buflist->data);
+    buffer = gst_adapter_take_buffer (parse->input_adapter, next);
+    p_ret = klass->parse_data (parse, buffer);
 
     switch (p_ret) {
       case GST_BASE_VIDEO_PARSE_ADD:
-        gst_base_video_parse_add_to_frame (base_video_parse, buffer);
+        gst_base_video_parse_add_to_frame (parse, buffer);
         break;
       case GST_BASE_VIDEO_PARSE_FINISH:
-        gst_base_video_parse_finish_frame (base_video_parse);
-        gst_base_video_parse_add_to_frame (base_video_parse, buffer);
+        gst_base_video_parse_finish_frame (parse);
+        gst_base_video_parse_add_to_frame (parse, buffer);
         break;
       case GST_BASE_VIDEO_PARSE_DROP:
         gst_buffer_unref (buffer);
@@ -650,8 +627,7 @@ gst_base_video_parse_drain (GstBaseVideoParse * base_video_parse,
         break;
     }
 
-    ret = klass->scan_for_packet_end (base_video_parse,
-        base_video_parse->input_adapter, &next);
+    ret = klass->scan_for_packet_end (parse, parse->input_adapter, &next);
   }
 
   if (ret == GST_BASE_VIDEO_PARSE_FLOW_NEED_DATA) {
@@ -663,32 +639,30 @@ gst_base_video_parse_drain (GstBaseVideoParse * base_video_parse,
 static GstFlowReturn
 gst_base_video_parse_chain (GstPad * pad, GstBuffer * buf)
 {
-  GstBaseVideoParse *base_video_parse;
+  GstBaseVideoParse *parse;
   GstBaseVideoParseClass *klass;
   gboolean discont = FALSE;
 
   GST_DEBUG ("chain with %d bytes", GST_BUFFER_SIZE (buf));
 
-  base_video_parse = GST_BASE_VIDEO_PARSE (GST_PAD_PARENT (pad));
-  klass = GST_BASE_VIDEO_PARSE_GET_CLASS (base_video_parse);
+  parse = GST_BASE_VIDEO_PARSE (GST_PAD_PARENT (pad));
+  klass = GST_BASE_VIDEO_PARSE_GET_CLASS (parse);
 
-  if (!base_video_parse->started) {
-    klass->start (base_video_parse);
-    base_video_parse->started = TRUE;
+  if (!parse->started) {
+    klass->start (parse);
+    parse->started = TRUE;
   }
 
   /* If we have an offset, and the incoming offset doesn't match, 
      or we have a discont, handle it first by flushing out data
      we have collected. */
-  if (base_video_parse->next_offset != GST_BUFFER_OFFSET_NONE) {
+  if (parse->next_offset != GST_BUFFER_OFFSET_NONE) {
     if (GST_BUFFER_OFFSET_IS_VALID (buf)) {
-      if (base_video_parse->next_offset != GST_BUFFER_OFFSET (buf))
+      if (parse->next_offset != GST_BUFFER_OFFSET (buf))
         discont = TRUE;
-      base_video_parse->next_offset =
-          GST_BUFFER_OFFSET (buf) + GST_BUFFER_SIZE (buf);
+      parse->next_offset = GST_BUFFER_OFFSET (buf) + GST_BUFFER_SIZE (buf);
     } else {
-      base_video_parse->next_offset =
-          base_video_parse->next_offset + GST_BUFFER_SIZE (buf);
+      parse->next_offset = parse->next_offset + GST_BUFFER_SIZE (buf);
     }
   }
 
@@ -696,109 +670,107 @@ gst_base_video_parse_chain (GstPad * pad, GstBuffer * buf)
     discont = TRUE;
 
   if (discont) {
-    GST_DEBUG_OBJECT (base_video_parse, "received DISCONT buffer");
-    gst_base_video_parse_flush (base_video_parse);
+    GST_DEBUG_OBJECT (parse, "received DISCONT buffer");
+    gst_base_video_parse_flush (parse);
   }
 
   GST_DEBUG ("upstream timestamp: %" GST_TIME_FORMAT,
       GST_TIME_ARGS (GST_BUFFER_TIMESTAMP (buf)));
-  gst_adapter_push (base_video_parse->input_adapter, buf);
+  gst_adapter_push (parse->input_adapter, buf);
 
-  return gst_base_video_parse_drain (base_video_parse, FALSE);
+  return gst_base_video_parse_drain (parse, FALSE);
 }
 
 GstVideoState *
-gst_base_video_parse_get_state (GstBaseVideoParse * base_video_parse)
+gst_base_video_parse_get_state (GstBaseVideoParse * parse)
 {
-  return &base_video_parse->state;
+  return &parse->state;
 }
 
 void
-gst_base_video_parse_set_state (GstBaseVideoParse * base_video_parse,
+gst_base_video_parse_set_state (GstBaseVideoParse * parse,
     GstVideoState * state)
 {
   GST_DEBUG ("set_state");
 
-  memcpy (&base_video_parse->state, state, sizeof (GstVideoState));
+  memcpy (&parse->state, state, sizeof (GstVideoState));
 
   /* FIXME set caps */
 
 }
 
 void
-gst_base_video_parse_lost_sync (GstBaseVideoParse * base_video_parse)
+gst_base_video_parse_lost_sync (GstBaseVideoParse * parse)
 {
-  g_return_if_fail (GST_IS_BASE_VIDEO_PARSE (base_video_parse));
+  g_return_if_fail (GST_IS_BASE_VIDEO_PARSE (parse));
 
   GST_DEBUG ("lost_sync");
 
-  if (gst_adapter_available (base_video_parse->input_adapter) >= 1) {
-    gst_adapter_flush (base_video_parse->input_adapter, 1);
+  if (gst_adapter_available (parse->input_adapter) >= 1) {
+    gst_adapter_flush (parse->input_adapter, 1);
   }
 
-  base_video_parse->have_sync = FALSE;
+  parse->have_sync = FALSE;
 }
 
 GstVideoFrame *
-gst_base_video_parse_get_frame (GstBaseVideoParse * base_video_parse)
+gst_base_video_parse_get_frame (GstBaseVideoParse * parse)
 {
-  g_return_val_if_fail (GST_IS_BASE_VIDEO_PARSE (base_video_parse), NULL);
+  g_return_val_if_fail (GST_IS_BASE_VIDEO_PARSE (parse), NULL);
 
-  return base_video_parse->current_frame;
+  return parse->current_frame;
 }
 
 static void
-gst_base_video_parse_add_to_frame (GstBaseVideoParse * base_video_parse,
+gst_base_video_parse_add_to_frame (GstBaseVideoParse * parse,
     GstBuffer * buffer)
 {
-  if (gst_adapter_available (base_video_parse->output_adapter) == 0)
-    base_video_parse->upstream_timestamp =
-        base_video_parse->input_buffer_timestamp;
+  if (gst_adapter_available (parse->output_adapter) == 0)
+    parse->upstream_timestamp = parse->input_buffer_timestamp;
 
-  gst_adapter_push (base_video_parse->output_adapter, buffer);
+  gst_adapter_push (parse->output_adapter, buffer);
 }
 
 static GstFlowReturn
-gst_base_video_parse_finish_frame (GstBaseVideoParse * base_video_parse)
+gst_base_video_parse_finish_frame (GstBaseVideoParse * parse)
 {
-  GstVideoFrame *frame = base_video_parse->current_frame;
+  GstVideoFrame *frame = parse->current_frame;
   GstClockTime upstream_timestamp;
   GstBuffer *buffer;
-  GstBaseVideoParseClass *base_video_parse_class;
+  GstBaseVideoParseClass *parse_class;
   GstFlowReturn ret;
 
   GST_DEBUG ("finish_frame");
 
-  base_video_parse_class = GST_BASE_VIDEO_PARSE_GET_CLASS (base_video_parse);
+  parse_class = GST_BASE_VIDEO_PARSE_GET_CLASS (parse);
 
-  if (gst_adapter_available (base_video_parse->output_adapter)) {
-    upstream_timestamp = base_video_parse->upstream_timestamp;
+  if (gst_adapter_available (parse->output_adapter)) {
+    upstream_timestamp = parse->upstream_timestamp;
     buffer =
-        gst_adapter_take_buffer (base_video_parse->output_adapter,
-        gst_adapter_available (base_video_parse->output_adapter));
+        gst_adapter_take_buffer (parse->output_adapter,
+        gst_adapter_available (parse->output_adapter));
 
     if (!GST_CLOCK_TIME_IS_VALID (frame->presentation_duration)) {
       frame->presentation_duration = gst_util_uint64_scale (GST_SECOND,
-          base_video_parse->state.fps_d, base_video_parse->state.fps_n);
+          parse->state.fps_d, parse->state.fps_n);
     }
 
     /* we prefer timestamps coming from upstream */
     if (GST_CLOCK_TIME_IS_VALID (upstream_timestamp)
-        && upstream_timestamp != base_video_parse->presentation_timestamp) {
+        && upstream_timestamp != parse->presentation_timestamp) {
       GST_DEBUG ("Got upstream timestamp");
-      frame->presentation_timestamp = base_video_parse->upstream_timestamp;
+      frame->presentation_timestamp = parse->upstream_timestamp;
     }
 
     if (frame->is_sync_point) {
       if (GST_CLOCK_TIME_IS_VALID (frame->presentation_timestamp)
           && frame->presentation_frame_number != -1) {
-        base_video_parse->timestamp_offset =
+        parse->timestamp_offset =
             frame->presentation_timestamp -
             gst_util_uint64_scale (frame->presentation_frame_number,
-            base_video_parse->state.fps_d * GST_SECOND,
-            base_video_parse->state.fps_n);
+            parse->state.fps_d * GST_SECOND, parse->state.fps_n);
 
-        base_video_parse->distance_from_sync = 0;
+        parse->distance_from_sync = 0;
       }
 
       else
@@ -811,20 +783,19 @@ gst_base_video_parse_finish_frame (GstBaseVideoParse * base_video_parse)
         && frame->presentation_frame_number != -1) {
 
       frame->presentation_timestamp =
-          gst_base_video_parse_get_timestamp (base_video_parse,
+          gst_base_video_parse_get_timestamp (parse,
           frame->presentation_frame_number);
     }
 
-    base_video_parse->presentation_timestamp = frame->presentation_timestamp;
-    gst_segment_set_last_stop (&base_video_parse->state.segment,
-        GST_FORMAT_TIME, base_video_parse->presentation_timestamp);
+    parse->presentation_timestamp = frame->presentation_timestamp;
+    gst_segment_set_last_stop (&parse->state.segment,
+        GST_FORMAT_TIME, parse->presentation_timestamp);
 
-    frame->distance_from_sync = base_video_parse->distance_from_sync;
-    base_video_parse->distance_from_sync++;
+    frame->distance_from_sync = parse->distance_from_sync;
+    parse->distance_from_sync++;
 
     frame->decode_timestamp =
-        gst_base_video_parse_get_timestamp (base_video_parse,
-        frame->decode_frame_number);
+        gst_base_video_parse_get_timestamp (parse, frame->decode_frame_number);
 
     GST_BUFFER_TIMESTAMP (buffer) = frame->presentation_timestamp;
     GST_BUFFER_DURATION (buffer) = frame->presentation_duration;
@@ -842,14 +813,13 @@ gst_base_video_parse_finish_frame (GstBaseVideoParse * base_video_parse)
     }
 
     frame->src_buffer = buffer;
-    ret = base_video_parse_class->shape_output (base_video_parse, frame);
+    ret = parse_class->shape_output (parse, frame);
   }
 
-  gst_base_video_parse_free_frame (base_video_parse->current_frame);
+  gst_base_video_parse_free_frame (parse->current_frame);
 
   /* create new frame */
-  base_video_parse->current_frame =
-      gst_base_video_parse_new_frame (base_video_parse);
+  parse->current_frame = gst_base_video_parse_new_frame (parse);
 
   return ret;
 }
@@ -870,7 +840,7 @@ gst_base_video_parse_free_frame (GstVideoFrame * frame)
 }
 
 static GstVideoFrame *
-gst_base_video_parse_new_frame (GstBaseVideoParse * base_video_parse)
+gst_base_video_parse_new_frame (GstBaseVideoParse * parse)
 {
   GstVideoFrame *frame;
 
@@ -880,51 +850,48 @@ gst_base_video_parse_new_frame (GstBaseVideoParse * base_video_parse)
   frame->presentation_timestamp = GST_CLOCK_TIME_NONE;
   frame->presentation_frame_number = -1;
 
-  frame->system_frame_number = base_video_parse->system_frame_number;
-  base_video_parse->system_frame_number++;
+  frame->system_frame_number = parse->system_frame_number;
+  parse->system_frame_number++;
 
   frame->decode_frame_number = frame->system_frame_number -
-      base_video_parse->reorder_depth;
+      parse->reorder_depth;
 
   return frame;
 }
 
 void
-gst_base_video_parse_set_sync_point (GstBaseVideoParse * base_video_parse)
+gst_base_video_parse_set_sync_point (GstBaseVideoParse * parse)
 {
   GST_DEBUG ("set_sync_point");
 
-  base_video_parse->current_frame->is_sync_point = TRUE;
+  parse->current_frame->is_sync_point = TRUE;
 
-  base_video_parse->distance_from_sync = 0;
+  parse->distance_from_sync = 0;
 }
 
 GstFlowReturn
-gst_base_video_parse_push (GstBaseVideoParse * base_video_parse,
-    GstBuffer * buffer)
+gst_base_video_parse_push (GstBaseVideoParse * parse, GstBuffer * buffer)
 {
-  GstBaseVideoParseClass *base_video_parse_class;
+  GstBaseVideoParseClass *parse_class;
 
-  base_video_parse_class = GST_BASE_VIDEO_PARSE_GET_CLASS (base_video_parse);
+  parse_class = GST_BASE_VIDEO_PARSE_GET_CLASS (parse);
 
-  if (base_video_parse->caps == NULL) {
+  if (parse->caps == NULL) {
     gboolean ret;
 
-    base_video_parse->caps =
-        base_video_parse_class->get_caps (base_video_parse);
+    parse->caps = parse_class->get_caps (parse);
 
-    ret = gst_pad_set_caps (GST_BASE_VIDEO_PARSE_SRC_PAD (base_video_parse),
-        base_video_parse->caps);
+    ret = gst_pad_set_caps (GST_BASE_VIDEO_PARSE_SRC_PAD (parse), parse->caps);
 
     if (!ret) {
       GST_WARNING ("pad didn't accept caps");
       return GST_FLOW_ERROR;
     }
 
-    gst_base_video_parse_send_pending_segs (base_video_parse);
+    gst_base_video_parse_send_pending_segs (parse);
   }
   gst_buffer_set_caps (buffer,
-      GST_PAD_CAPS (GST_BASE_VIDEO_PARSE_SRC_PAD (base_video_parse)));
+      GST_PAD_CAPS (GST_BASE_VIDEO_PARSE_SRC_PAD (parse)));
 
   GST_LOG ("pushing buffer of %u bytes ts=%" GST_TIME_FORMAT " dur=%"
       GST_TIME_FORMAT " off=%" GST_TIME_FORMAT " off_end=%" GST_TIME_FORMAT,
@@ -933,58 +900,55 @@ gst_base_video_parse_push (GstBaseVideoParse * base_video_parse,
       GST_TIME_ARGS (GST_BUFFER_OFFSET (buffer)),
       GST_TIME_ARGS (GST_BUFFER_OFFSET_END (buffer)));
 
-  if (base_video_parse->discont) {
+  if (parse->discont) {
     GST_BUFFER_FLAG_SET (buffer, GST_BUFFER_FLAG_DISCONT);
-    base_video_parse->discont = FALSE;
+    parse->discont = FALSE;
   } else {
     GST_BUFFER_FLAG_UNSET (buffer, GST_BUFFER_FLAG_DISCONT);
   }
 
-  return gst_pad_push (GST_BASE_VIDEO_PARSE_SRC_PAD (base_video_parse), buffer);
+  return gst_pad_push (GST_BASE_VIDEO_PARSE_SRC_PAD (parse), buffer);
 }
 
 void
-gst_base_video_parse_set_duration (GstBaseVideoParse * base_video_parse,
+gst_base_video_parse_set_duration (GstBaseVideoParse * parse,
     GstFormat format, gint64 duration)
 {
-  g_return_if_fail (GST_IS_BASE_VIDEO_PARSE (base_video_parse));
+  g_return_if_fail (GST_IS_BASE_VIDEO_PARSE (parse));
 
-  if (duration != base_video_parse->duration) {
+  if (duration != parse->duration) {
     GstMessage *m;
 
-    m = gst_message_new_duration (GST_OBJECT (base_video_parse), format,
-        duration);
-    gst_element_post_message (GST_ELEMENT (base_video_parse), m);
+    m = gst_message_new_duration (GST_OBJECT (parse), format, duration);
+    gst_element_post_message (GST_ELEMENT (parse), m);
   }
 
-  base_video_parse->duration = duration;
-  base_video_parse->duration_fmt = format;
+  parse->duration = duration;
+  parse->duration_fmt = format;
 }
 
 static void
-gst_base_video_parse_send_pending_segs (GstBaseVideoParse * base_video_parse)
+gst_base_video_parse_send_pending_segs (GstBaseVideoParse * parse)
 {
-  while (base_video_parse->pending_segs) {
-    GstEvent *ev = base_video_parse->pending_segs->data;
+  while (parse->pending_segs) {
+    GstEvent *ev = parse->pending_segs->data;
 
-    gst_pad_push_event (base_video_parse->srcpad, ev);
+    gst_pad_push_event (parse->srcpad, ev);
 
-    base_video_parse->pending_segs =
-        g_slist_delete_link (base_video_parse->pending_segs,
-        base_video_parse->pending_segs);
+    parse->pending_segs =
+        g_slist_delete_link (parse->pending_segs, parse->pending_segs);
   }
-  base_video_parse->pending_segs = NULL;
+  parse->pending_segs = NULL;
 }
 
 static void
-gst_base_video_parse_clear_pending_segs (GstBaseVideoParse * base_video_parse)
+gst_base_video_parse_clear_pending_segs (GstBaseVideoParse * parse)
 {
-  while (base_video_parse->pending_segs) {
-    GstEvent *ev = base_video_parse->pending_segs->data;
+  while (parse->pending_segs) {
+    GstEvent *ev = parse->pending_segs->data;
     gst_event_unref (ev);
 
-    base_video_parse->pending_segs =
-        g_slist_delete_link (base_video_parse->pending_segs,
-        base_video_parse->pending_segs);
+    parse->pending_segs =
+        g_slist_delete_link (parse->pending_segs, parse->pending_segs);
   }
 }
