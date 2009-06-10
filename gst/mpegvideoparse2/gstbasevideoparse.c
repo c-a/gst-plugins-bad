@@ -301,8 +301,7 @@ gst_base_video_parse_src_query (GstPad * pad, GstQuery * query)
       gint64 value;
 
       /* see if upstream can handle it */
-      gst_query_ref (query);
-      res = gst_pad_query (GST_BASE_VIDEO_PARSE_SINK_PAD (base_parse), query);
+      res = gst_pad_query_default (pad, query);
       if (res)
         goto done;
 
@@ -326,8 +325,7 @@ gst_base_video_parse_src_query (GstPad * pad, GstQuery * query)
       gint64 value;
 
       /* see if upstream can handle it */
-      gst_query_ref (query);
-      res = gst_pad_query (GST_BASE_VIDEO_PARSE_SINK_PAD (base_parse), query);
+      res = gst_pad_query_default (pad, query);
       if (res)
         goto done;
 
@@ -338,7 +336,6 @@ gst_base_video_parse_src_query (GstPad * pad, GstQuery * query)
         res = gst_base_video_parse_get_duration (parse, format, &value);
 #endif
       res = FALSE;
-      GST_WARNING ("ASDASD");
       if (res)
         gst_query_set_position (query, format, value);
 
@@ -350,8 +347,7 @@ gst_base_video_parse_src_query (GstPad * pad, GstQuery * query)
       gint64 src_val, dest_val;
 
       /* see if upstream can handle it */
-      gst_query_ref (query);
-      res = gst_pad_query (GST_BASE_VIDEO_PARSE_SINK_PAD (base_parse), query);
+      res = gst_pad_query_default (pad, query);
       if (res)
         goto done;
 
@@ -366,7 +362,7 @@ gst_base_video_parse_src_query (GstPad * pad, GstQuery * query)
       break;
     }
     default:
-      gst_pad_query_default (pad, query);
+      res = gst_pad_query_default (pad, query);
       break;
   }
 done:
@@ -395,18 +391,14 @@ gst_base_video_parse_src_event (GstPad * pad, GstEvent * event)
       gint64 tcur, tstop;
 
       /* see if upstream can handle it */
-      gst_event_ref (event);
       res =
           gst_pad_push_event (GST_BASE_VIDEO_PARSE_SINK_PAD (base_video_parse),
           event);
-      if (res) {
-        gst_event_unref (event);
+      if (res)
         goto done;
-      }
 
       gst_event_parse_seek (event, &rate, &format, &flags, &cur_type,
           &cur, &stop_type, &stop);
-      gst_event_unref (event);
 
       tformat = GST_FORMAT_BYTES;
       res = gst_base_video_parse_convert (pad, format, cur, &tformat, &tcur);
@@ -519,7 +511,6 @@ gst_base_video_parse_sink_event (GstPad * pad, GstEvent * event)
           time = 0;
         }
 
-        gst_event_unref (event);
         event = gst_event_new_new_segment (update, rate, tformat, start,
             stop, time);
       }
@@ -550,7 +541,6 @@ done:
 
 newseg_wrong_rate:
   GST_DEBUG_OBJECT (base_video_parse, "negative rates not supported");
-  gst_event_unref (event);
   goto done;
 }
 
