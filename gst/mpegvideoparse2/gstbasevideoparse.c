@@ -174,19 +174,18 @@ gst_base_video_parse_init (GstBaseVideoParse * parse,
 /*
  * Public functions
  */
-GstVideoState *
+GstVideoState
 gst_base_video_parse_get_state (GstBaseVideoParse * parse)
 {
-  return &parse->state;
+  return parse->state;
 }
 
 void
-gst_base_video_parse_set_state (GstBaseVideoParse * parse,
-    GstVideoState * state)
+gst_base_video_parse_set_state (GstBaseVideoParse * parse, GstVideoState state)
 {
   GST_DEBUG ("set_state");
 
-  memcpy (&parse->state, state, sizeof (GstVideoState));
+  parse->state = state;
 
   /* FIXME set caps */
 

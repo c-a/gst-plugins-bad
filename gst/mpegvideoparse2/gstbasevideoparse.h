@@ -147,20 +147,20 @@ struct _GstBaseVideoParseClass
 
 GType gst_base_video_parse_get_type (void);
 
-GstVideoState *gst_base_video_parse_get_state      (GstBaseVideoParse *parse);
+GstVideoState  gst_base_video_parse_get_state      (GstBaseVideoParse *parse);
 void           gst_base_video_parse_set_state      (GstBaseVideoParse *parse,
-                                                    GstVideoState *state);
+                                                    GstVideoState state);
 
-void gst_base_video_parse_lost_sync                (GstBaseVideoParse *parse);
+void           gst_base_video_parse_set_duration   (GstBaseVideoParse *parse, 
+                                                    GstFormat format,
+                                                    gint64 duration);
+
+void           gst_base_video_parse_lost_sync      (GstBaseVideoParse *parse);
 
 GstVideoFrame *gst_base_video_parse_get_frame      (GstBaseVideoParse *parse);
 void           gst_base_video_parse_set_sync_point (GstBaseVideoParse *parse);
 GstFlowReturn  gst_base_video_parse_push           (GstBaseVideoParse *parse,
                                                     GstBuffer *buffer);
-void
-gst_base_video_parse_set_duration                  (GstBaseVideoParse *parse, 
-                                                    GstFormat format,
-                                                    gint64 duration);
 
 G_END_DECLS
 

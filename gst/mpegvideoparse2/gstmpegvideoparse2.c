@@ -63,7 +63,7 @@ static GstCaps *
 gst_mvp2_get_caps (GstBaseVideoParse * parse)
 {
   GstMpegVideoParse2 *mpegparse = GST_MPEG_VIDEO_PARSE2 (parse);
-  GstVideoState *state;
+  GstVideoState state;
   GstCaps *caps;
 
   state = gst_base_video_parse_get_state (parse);
@@ -71,11 +71,11 @@ gst_mvp2_get_caps (GstBaseVideoParse * parse)
       "systemstream", G_TYPE_BOOLEAN, FALSE,
       "parsed", G_TYPE_BOOLEAN, TRUE,
       "mpegversion", G_TYPE_INT, mpegparse->version,
-      "width", G_TYPE_INT, state->width,
-      "height", G_TYPE_INT, state->height,
-      "framerate", GST_TYPE_FRACTION, state->fps_n, state->fps_d,
-      "pixel-aspect-ratio", GST_TYPE_FRACTION, state->par_n, state->par_d,
-      "interlaced", G_TYPE_BOOLEAN, state->interlaced,
+      "width", G_TYPE_INT, state.width,
+      "height", G_TYPE_INT, state.height,
+      "framerate", GST_TYPE_FRACTION, state.fps_n, state.fps_d,
+      "pixel-aspect-ratio", GST_TYPE_FRACTION, state.par_n, state.par_d,
+      "interlaced", G_TYPE_BOOLEAN, state.interlaced,
       "codec_data", GST_TYPE_BUFFER, mpegparse->seq_header_buffer, NULL);
 
   return caps;
@@ -137,7 +137,7 @@ gst_mvp2_handle_sequence_extension (GstMpegVideoParse2 * mpegparse,
 {
   GstBaseVideoParse *parse = GST_BASE_VIDEO_PARSE (mpegparse);
   MPEGSeqExtHdr hdr;
-  GstVideoState *state;
+  GstVideoState state;
   GstBuffer *new_buffer;
 
   if (!mpeg_util_parse_sequence_extension (&hdr, buffer))
@@ -145,13 +145,13 @@ gst_mvp2_handle_sequence_extension (GstMpegVideoParse2 * mpegparse,
 
   state = gst_base_video_parse_get_state (parse);
 
-  state->fps_n *= (hdr.fps_n_ext + 1);
-  state->fps_d *= (hdr.fps_d_ext + 1);
+  state.fps_n *= (hdr.fps_n_ext + 1);
+  state.fps_d *= (hdr.fps_d_ext + 1);
 
-  state->width += (hdr.horiz_size_ext << 12);
-  state->height += (hdr.vert_size_ext << 12);
+  state.width += (hdr.horiz_size_ext << 12);
+  state.height += (hdr.vert_size_ext << 12);
 
-  state->interlaced = !hdr.progressive;
+  state.interlaced = !hdr.progressive;
   gst_base_video_parse_set_state (parse, state);
 
   new_buffer = gst_buffer_merge (mpegparse->seq_header_buffer, buffer);
@@ -168,21 +168,21 @@ gst_mvp2_handle_sequence (GstMpegVideoParse2 * mpegparse, GstBuffer * buffer)
 {
   GstBaseVideoParse *parse = GST_BASE_VIDEO_PARSE (mpegparse);
   MPEGSeqHdr hdr;
-  GstVideoState *state;
+  GstVideoState state;
 
   if (!mpeg_util_parse_sequence_hdr (&hdr, buffer))
     return FALSE;
 
   state = gst_base_video_parse_get_state (parse);
 
-  state->width = hdr.width;
-  state->height = hdr.height;
+  state.width = hdr.width;
+  state.height = hdr.height;
 
-  state->fps_n = hdr.fps_n;
-  state->fps_d = hdr.fps_d;
+  state.fps_n = hdr.fps_n;
+  state.fps_d = hdr.fps_d;
 
-  state->par_n = hdr.par_w;
-  state->par_d = hdr.par_h;
+  state.par_n = hdr.par_w;
+  state.par_d = hdr.par_h;
 
   gst_base_video_parse_set_state (parse, state);
 
@@ -200,7 +200,7 @@ gst_mvp2_handle_gop (GstMpegVideoParse2 * mpegparse, GstBuffer * buffer)
 {
   GstBaseVideoParse *parse = GST_BASE_VIDEO_PARSE (mpegparse);
   MPEGGop gop;
-  GstVideoState *state;
+  GstVideoState state;
   GstClockTime time;
 
   if (!mpeg_util_parse_gop (&gop, buffer))
@@ -213,8 +213,8 @@ gst_mvp2_handle_gop (GstMpegVideoParse2 * mpegparse, GstBuffer * buffer)
   GST_DEBUG ("gop timestamp: %" GST_TIME_FORMAT, GST_TIME_ARGS (time));
 
   mpegparse->gop_start =
-      gst_util_uint64_scale (time, state->fps_n,
-      state->fps_d * GST_SECOND) + gop.frame;
+      gst_util_uint64_scale (time, state.fps_n,
+      state.fps_d * GST_SECOND) + gop.frame;
 
   GST_DEBUG ("gop frame_nr: %" G_GUINT64_FORMAT, mpegparse->gop_start);
 
