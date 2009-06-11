@@ -138,11 +138,17 @@ struct _GstBaseVideoParseClass
 
   GstCaps                *(*get_caps)            (GstBaseVideoParse *parse);
 
-  gboolean                (*convert)             (GstBaseVideoParse * parse,
+  gboolean                (*convert)             (GstBaseVideoParse *parse,
                                                   GstFormat src_format,
                                                   gint64 src_value,
                                                   GstFormat dest_format,
                                                   gint64 * dest_value);
+
+  gboolean                (*sink_event)          (GstBaseVideoParse *parse,
+                                                  GstEvent *event);
+
+  gboolean                (*src_event)           (GstBaseVideoParse *parse,
+                                                  GstEvent *event);
 };
 
 GType gst_base_video_parse_get_type (void);

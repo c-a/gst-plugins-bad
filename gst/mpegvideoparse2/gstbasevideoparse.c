@@ -428,10 +428,12 @@ done:
 static gboolean
 gst_base_video_parse_src_event (GstPad * pad, GstEvent * event)
 {
-  GstBaseVideoParse *parse;
-  gboolean res = FALSE;
+  GstBaseVideoParse *parse = GST_BASE_VIDEO_PARSE (gst_pad_get_parent (pad));
+  GstBaseVideoParseClass *klass = GST_BASE_VIDEO_PARSE_GET_CLASS (parse);
+  gboolean res;
 
-  parse = GST_BASE_VIDEO_PARSE (gst_pad_get_parent (pad));
+  if (klass->src_event && (res == klass->src_event (parse, event)))
+    goto done;
 
   switch (GST_EVENT_TYPE (event)) {
     case GST_EVENT_SEEK:
@@ -484,10 +486,12 @@ convert_error:
 static gboolean
 gst_base_video_parse_sink_event (GstPad * pad, GstEvent * event)
 {
-  GstBaseVideoParse *parse;
-  gboolean res = FALSE;
+  GstBaseVideoParse *parse = GST_BASE_VIDEO_PARSE (gst_pad_get_parent (pad));
+  GstBaseVideoParseClass *klass = GST_BASE_VIDEO_PARSE_GET_CLASS (parse);
+  gboolean res;
 
-  parse = GST_BASE_VIDEO_PARSE (gst_pad_get_parent (pad));
+  if (klass->sink_event && (res = klass->sink_event (parse, event)))
+    goto done;
 
   switch (GST_EVENT_TYPE (event)) {
     case GST_EVENT_FLUSH_STOP:
@@ -562,6 +566,7 @@ done:
 
 newseg_wrong_rate:
   GST_DEBUG_OBJECT (parse, "negative rates not supported");
+  res = TRUE;
   goto done;
 }
 
