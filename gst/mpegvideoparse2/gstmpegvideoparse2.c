@@ -349,9 +349,33 @@ invalid_packet:
 static GstFlowReturn
 gst_mvp2_shape_output (GstBaseVideoParse * parse, GstVideoFrame * frame)
 {
-  GST_DEBUG ("frame_nr: %d", frame->presentation_frame_number);
+  GstMpegVideoParse2 *mpegparse = GST_MPEG_VIDEO_PARSE2 (parse);
+  GstBuffer *buf = frame->src_buffer;
 
-  return gst_base_video_parse_push (parse, frame->src_buffer);
+  if (GST_BUFFER_DURATION (buf) != GST_CLOCK_TIME_NONE) {
+    GstFormat format;
+    gint64 byte_duration;
+
+    mpegparse->accumulated_duration += GST_BUFFER_DURATION (buf);
+    mpegparse->accumulated_size += GST_BUFFER_SIZE (buf);
+
+    mpegparse->byterate =
+        gst_util_uint64_scale (GST_SECOND, mpegparse->accumulated_size,
+        mpegparse->accumulated_duration);
+
+    /* update duration */
+    format = GST_FORMAT_BYTES;
+    if (gst_pad_query_duration (GST_BASE_VIDEO_PARSE_SRC_PAD (parse), &format,
+            &byte_duration) && format == GST_FORMAT_BYTES) {
+      gint64 duration;
+
+      duration = gst_util_uint64_scale (GST_SECOND, byte_duration,
+          mpegparse->byterate);
+      gst_base_video_parse_set_duration (parse, GST_FORMAT_TIME, duration);
+    }
+  }
+
+  return gst_base_video_parse_push (parse, buf);
 }
 
 static gboolean
@@ -365,6 +389,10 @@ gst_mvp2_start (GstBaseVideoParse * parse)
 
   mpegparse->version = 1;
   mpegparse->seq_header_buffer = NULL;
+
+  mpegparse->byterate = -1;
+  mpegparse->accumulated_duration = 0;
+  mpegparse->accumulated_size = 0;
 
   return TRUE;
 }

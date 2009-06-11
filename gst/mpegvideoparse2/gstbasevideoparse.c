@@ -391,7 +391,7 @@ gst_base_video_parse_src_query (GstPad * pad, GstQuery * query)
             parse->duration_fmt, parse->duration, &format, &duration);
 
       if (res)
-        gst_query_set_position (query, format, duration);
+        gst_query_set_duration (query, format, duration);
 
       break;
     }
