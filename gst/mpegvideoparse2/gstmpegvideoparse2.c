@@ -59,6 +59,28 @@ GST_BOILERPLATE (GstMpegVideoParse2, gst_mvp2, GstBaseVideoParse,
 
 #define MVP2_HEADER_SIZE 4
 
+static gboolean
+gst_mvp2_convert (GstBaseVideoParse * parse, GstFormat src_format,
+    gint64 src_value, GstFormat dest_format, gint64 * dest_value)
+{
+  GstMpegVideoParse2 *mpegparse = GST_MPEG_VIDEO_PARSE2 (parse);
+
+  if (mpegparse->byterate == -1)
+    return FALSE;
+
+  if (src_format == GST_FORMAT_BYTES && dest_format == GST_FORMAT_TIME) {
+    *dest_value = gst_util_uint64_scale (GST_SECOND, src_value,
+        mpegparse->byterate);
+    return TRUE;
+  } else if (src_format == GST_FORMAT_TIME && dest_format == GST_FORMAT_BYTES) {
+    *dest_value = gst_util_uint64_scale (src_value, mpegparse->byterate,
+        GST_SECOND);
+    return TRUE;
+  }
+
+  return FALSE;
+}
+
 static GstCaps *
 gst_mvp2_get_caps (GstBaseVideoParse * parse)
 {
@@ -473,6 +495,8 @@ gst_mvp2_class_init (GstMpegVideoParse2Class * klass)
   baseparse_class->shape_output = GST_DEBUG_FUNCPTR (gst_mvp2_shape_output);
 
   baseparse_class->get_caps = GST_DEBUG_FUNCPTR (gst_mvp2_get_caps);
+
+  baseparse_class->convert = GST_DEBUG_FUNCPTR (gst_mvp2_convert);
 }
 
 /**
