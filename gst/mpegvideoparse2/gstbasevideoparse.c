@@ -948,7 +948,10 @@ gst_base_video_parse_finish_frame (GstBaseVideoParse * parse)
     }
 
     frame->src_buffer = buffer;
-    ret = parse_class->shape_output (parse, frame);
+    if (parse_class->shape_output)
+      ret = parse_class->shape_output (parse, frame);
+    else
+      ret = gst_base_video_parse_push (parse, frame->src_buffer);
   }
 
   gst_base_video_parse_free_frame (parse->current_frame);
