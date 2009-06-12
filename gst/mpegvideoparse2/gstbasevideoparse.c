@@ -717,6 +717,7 @@ gst_base_video_parse_start (GstBaseVideoParse * parse)
 
   gst_segment_init (&parse->state.segment, GST_FORMAT_TIME);
 
+  parse->upstream_timestamp = GST_CLOCK_TIME_NONE;
   parse->current_frame = gst_base_video_parse_new_frame (parse);
 
   parse->seeking = FALSE;
@@ -784,7 +785,7 @@ gst_base_video_parse_drain (GstBaseVideoParse * parse, gboolean at_eos)
   while (ret == GST_FLOW_OK) {
     GstBuffer *buffer;
 
-    parse->input_buffer_timestamp =
+    parse->upstream_timestamp =
         GST_BUFFER_TIMESTAMP (parse->input_adapter->buflist->data);
     buffer = gst_adapter_take_buffer (parse->input_adapter, next);
     ret = klass->parse_data (parse, buffer);
@@ -844,9 +845,6 @@ void
 gst_base_video_parse_add_to_frame (GstBaseVideoParse * parse,
     GstBuffer * buffer)
 {
-  if (gst_adapter_available (parse->output_adapter) == 0)
-    parse->upstream_timestamp = parse->input_buffer_timestamp;
-
   gst_adapter_push (parse->output_adapter, buffer);
 }
 
@@ -854,7 +852,6 @@ GstFlowReturn
 gst_base_video_parse_finish_frame (GstBaseVideoParse * parse)
 {
   GstVideoFrame *frame = parse->current_frame;
-  GstClockTime upstream_timestamp;
   GstBuffer *buffer;
   GstBaseVideoParseClass *parse_class;
   GstFlowReturn ret;
@@ -864,7 +861,6 @@ gst_base_video_parse_finish_frame (GstBaseVideoParse * parse)
   parse_class = GST_BASE_VIDEO_PARSE_GET_CLASS (parse);
 
   if (gst_adapter_available (parse->output_adapter)) {
-    upstream_timestamp = parse->upstream_timestamp;
     buffer =
         gst_adapter_take_buffer (parse->output_adapter,
         gst_adapter_available (parse->output_adapter));
@@ -872,13 +868,6 @@ gst_base_video_parse_finish_frame (GstBaseVideoParse * parse)
     if (!GST_CLOCK_TIME_IS_VALID (frame->presentation_duration)) {
       frame->presentation_duration = gst_util_uint64_scale (GST_SECOND,
           parse->state.fps_d, parse->state.fps_n);
-    }
-
-    /* we prefer timestamps coming from upstream */
-    if (GST_CLOCK_TIME_IS_VALID (upstream_timestamp)
-        && upstream_timestamp != parse->presentation_timestamp) {
-      GST_DEBUG ("Got upstream timestamp");
-      frame->presentation_timestamp = parse->upstream_timestamp;
     }
 
     if (frame->is_sync_point) {
@@ -969,7 +958,7 @@ gst_base_video_parse_new_frame (GstBaseVideoParse * parse)
   frame = g_malloc0 (sizeof (GstVideoFrame));
 
   frame->presentation_duration = GST_CLOCK_TIME_NONE;
-  frame->presentation_timestamp = GST_CLOCK_TIME_NONE;
+  frame->presentation_timestamp = parse->upstream_timestamp;
   frame->presentation_frame_number = -1;
 
   frame->system_frame_number = parse->system_frame_number;
