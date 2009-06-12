@@ -139,6 +139,39 @@ struct _GstBaseVideoParse
   GMutex *parse_lock;
 };
 
+/**
+ * GstBaseVideoParseClass:
+ * @start:               Optional.
+ *                       Called when the element starts processing.
+ *                       Allows opening external resources.
+ * @stop:                Optional.
+ *                       Called when the element stops processing.
+ *                       Allows closing external resources.
+ * @flush                Optional.
+ *                       Called when the elements state should be flushed
+ * @scan_for_sync:       Called when the element needs to find the start of a packet.
+ *                       Should return the size of the data before the firs
+ *                       packet.
+ * @scan_for_packet_end: Should determine the size of the packet. Should also
+ *                       detect if we've lost sync.
+ * @parse_data:          Parse the detected packet to determine what should be
+ *                       done with it.
+ * @shape_output:        Determine what should be done with the current package,
+ *                       e.g. push it, drop it, cache for reverse playback etc.
+ * @get_caps             Should return the caps that should be set on the src pad
+ * @convert:             Optional.
+ *                       Convert between formats.
+ * @sink_event:          Optional.
+ *                       Event handler on the sink pad. This function should return
+ *                       TRUE if the event was handled and can be dropped.
+ * @src_event:           Optional.
+ *                       Event handler on the source pad. Should return TRUE
+ *                       if the event was handled and can be dropped.
+ *
+ * Subclasses can override any of the available virtual methods or not, as
+ * needed. At minimum @scan_for_sync, @scan_for_packet_end, @parse_data and
+ * @get_caps needs to be overridden.
+ */
 struct _GstBaseVideoParseClass
 {
   GstElementClass element_class;
