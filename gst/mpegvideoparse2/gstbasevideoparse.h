@@ -207,10 +207,12 @@ void           gst_base_video_parse_set_duration   (GstBaseVideoParse *parse,
                                                     gint64 duration);
 
 void           gst_base_video_parse_lost_sync      (GstBaseVideoParse *parse);
+
 GstVideoFrame *gst_base_video_parse_get_frame      (GstBaseVideoParse *base_video_parse);
 void           gst_base_video_parse_add_to_frame   (GstBaseVideoParse *base_video_parse,
                                                     GstBuffer *buffer);
 GstFlowReturn  gst_base_video_parse_finish_frame   (GstBaseVideoParse *base_video_parse);
+
 void           gst_base_video_parse_set_sync_point (GstBaseVideoParse *base_video_parse);
 GstFlowReturn  gst_base_video_parse_push           (GstBaseVideoParse *base_video_parse,
                                                     GstBuffer *buffer);
