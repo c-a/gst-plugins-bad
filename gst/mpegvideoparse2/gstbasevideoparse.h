@@ -156,7 +156,8 @@ struct _GstBaseVideoParse
  *                       detect if we've lost sync.
  * @parse_data:          Parse the detected packet to determine what should be
  *                       done with it.
- * @shape_output:        Determine what should be done with the current package,
+ * @shape_output:        Optional.
+ *                       Determine what should be done with the current package,
  *                       e.g. push it, drop it, cache for reverse playback etc.
  * @get_caps             Should return the caps that should be set on the src pad
  * @convert:             Optional.
