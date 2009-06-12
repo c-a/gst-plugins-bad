@@ -83,10 +83,16 @@ G_BEGIN_DECLS
  */
 #define GST_BASE_VIDEO_PARSE_UNLOCK(obj) g_mutex_unlock (((GstBaseVideoParse *) (obj))->parse_lock)
 
+/**
+ * GstBaseVideoParseReturn:
+ * @GST_BASE_VIDEO_PARSE_ADD: The buffer should be added to the current frame
+ * @GST_BASE_VIDEO_PARSE_NEW_FRAME: The buffer begins a new frame
+ * @GST_BASE_VIDEO_PARSE_DROP: The buffer should be dropped
+ */
 typedef enum
 {
   GST_BASE_VIDEO_PARSE_ADD,
-  GST_BASE_VIDEO_PARSE_FINISH,
+  GST_BASE_VIDEO_PARSE_NEW_FRAME,
   GST_BASE_VIDEO_PARSE_DROP
 } GstBaseVideoParseReturn;
 

@@ -795,7 +795,7 @@ gst_base_video_parse_drain (GstBaseVideoParse * parse, gboolean at_eos)
       case GST_BASE_VIDEO_PARSE_ADD:
         gst_base_video_parse_add_to_frame (parse, buffer);
         break;
-      case GST_BASE_VIDEO_PARSE_FINISH:
+      case GST_BASE_VIDEO_PARSE_NEW_FRAME:
         gst_base_video_parse_finish_frame (parse);
         gst_base_video_parse_add_to_frame (parse, buffer);
         break;

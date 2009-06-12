@@ -302,7 +302,7 @@ gst_mvp2_parse_data (GstBaseVideoParse * parse, GstBuffer * buffer)
       GST_DEBUG_OBJECT (mpegparse, "MPEG_PACKET_SEQUENCE");
 
       if (mpegparse->state != GST_MVP2_STATE_NEED_SEQUENCE)
-        ret = GST_BASE_VIDEO_PARSE_FINISH;
+        ret = GST_BASE_VIDEO_PARSE_NEW_FRAME;
 
       if (!gst_mvp2_handle_sequence (mpegparse, buffer))
         goto invalid_packet;
@@ -313,7 +313,7 @@ gst_mvp2_parse_data (GstBaseVideoParse * parse, GstBuffer * buffer)
       GST_DEBUG_OBJECT (mpegparse, "MPEG_PACKET_GOP");
 
       if (mpegparse->prev_packet != MPEG_PACKET_SEQUENCE)
-        ret = GST_BASE_VIDEO_PARSE_FINISH;
+        ret = GST_BASE_VIDEO_PARSE_NEW_FRAME;
 
       if (!gst_mvp2_handle_gop (mpegparse, buffer))
         goto invalid_packet;
@@ -326,7 +326,7 @@ gst_mvp2_parse_data (GstBaseVideoParse * parse, GstBuffer * buffer)
 
       if (mpegparse->prev_packet != MPEG_PACKET_SEQUENCE &&
           mpegparse->prev_packet != MPEG_PACKET_GOP)
-        ret = GST_BASE_VIDEO_PARSE_FINISH;
+        ret = GST_BASE_VIDEO_PARSE_NEW_FRAME;
 
       if (!gst_mvp2_handle_picture (mpegparse, buffer))
         goto invalid_packet;
