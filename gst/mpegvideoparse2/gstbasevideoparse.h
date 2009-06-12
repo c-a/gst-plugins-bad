@@ -67,6 +67,22 @@ G_BEGIN_DECLS
    */
 #define GST_BASE_VIDEO_PARSE_FLOW_NEED_DATA GST_FLOW_CUSTOM_SUCCESS
 
+/**
+ * GST_BASE_VIDEO_PARSE_LOCK
+ * @obj base video parse instance 
+ *
+ * Obtain a lock to protect the parse function from concurrent access.
+ */
+#define GST_BASE_VIDEO_PARSE_LOCK(obj) g_mutex_lock (((GstBaseVideoParse *) (obj))->parse_lock)
+
+/**
+ * GST_BASE_VIDEO_PARSE_UNLOCK
+ * @obj base video parse instance 
+ *
+ * Release the lock that protects the parse function from concurrent access.
+ */
+#define GST_BASE_VIDEO_PARSE_UNLOCK(obj) g_mutex_unlock (((GstBaseVideoParse *) (obj))->parse_lock)
+
 typedef enum
 {
   GST_BASE_VIDEO_PARSE_ADD,
@@ -112,6 +128,9 @@ struct _GstBaseVideoParse
 
   GstClockTime duration;
   GstFormat duration_fmt;
+
+  gboolean seeking;
+  GMutex *parse_lock;
 };
 
 struct _GstBaseVideoParseClass

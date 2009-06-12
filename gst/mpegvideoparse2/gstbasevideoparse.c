@@ -127,6 +127,8 @@ gst_base_video_parse_finalize (GObject * object)
     g_object_unref (parse->output_adapter);
   }
 
+  g_mutex_free (parse->parse_lock);
+
   G_OBJECT_CLASS (parent_class)->finalize (object);
 }
 
@@ -169,6 +171,8 @@ gst_base_video_parse_init (GstBaseVideoParse * parse,
 
   parse->input_adapter = gst_adapter_new ();
   parse->output_adapter = gst_adapter_new ();
+
+  parse->parse_lock = g_mutex_new ();
 }
 
 /*
@@ -247,6 +251,7 @@ gst_base_video_parse_push (GstBaseVideoParse * parse, GstBuffer * buffer)
 
   parse_class = GST_BASE_VIDEO_PARSE_GET_CLASS (parse);
 
+  GST_BASE_VIDEO_PARSE_LOCK (parse);
   if (parse->caps == NULL) {
     gboolean ret;
 
@@ -256,11 +261,30 @@ gst_base_video_parse_push (GstBaseVideoParse * parse, GstBuffer * buffer)
 
     if (!ret) {
       GST_WARNING ("pad didn't accept caps");
+      GST_BASE_VIDEO_PARSE_UNLOCK (parse);
       return GST_FLOW_ERROR;
     }
 
     gst_base_video_parse_send_pending_segs (parse);
   }
+
+  if (parse->seeking) {
+    if (GST_BUFFER_TIMESTAMP_IS_VALID (buffer)) {
+      GstEvent *event;
+      event =
+          gst_event_new_new_segment (FALSE, parse->state.segment.rate,
+          GST_FORMAT_TIME, GST_BUFFER_TIMESTAMP (buffer),
+          parse->state.segment.stop, GST_BUFFER_TIMESTAMP (buffer));
+      gst_pad_push_event (parse->srcpad, event);
+      parse->seeking = FALSE;
+    } else {
+      gst_buffer_unref (buffer);
+      GST_BASE_VIDEO_PARSE_UNLOCK (parse);
+      return GST_FLOW_OK;
+    }
+  }
+  GST_BASE_VIDEO_PARSE_UNLOCK (parse);
+
   gst_buffer_set_caps (buffer,
       GST_PAD_CAPS (GST_BASE_VIDEO_PARSE_SRC_PAD (parse)));
 
@@ -468,6 +492,12 @@ gst_base_video_parse_src_event (GstPad * pad, GstEvent * event)
       res =
           gst_pad_push_event (GST_BASE_VIDEO_PARSE_SINK_PAD (parse), real_seek);
 
+      if (res) {
+        GST_BASE_VIDEO_PARSE_LOCK (parse);
+        parse->seeking = TRUE;
+        GST_BASE_VIDEO_PARSE_UNLOCK (parse);
+      }
+
       break;
     }
     default:
@@ -548,12 +578,17 @@ gst_base_video_parse_sink_event (GstPad * pad, GstEvent * event)
       gst_segment_set_newsegment (&parse->state.segment, update,
           rate, GST_FORMAT_TIME, start, stop, time);
 
-      if (parse->caps) {
+      GST_BASE_VIDEO_PARSE_LOCK (parse);
+      if (parse->seeking)
+        res = TRUE;
+      else if (parse->caps)
         res = gst_pad_push_event (GST_BASE_VIDEO_PARSE_SRC_PAD (parse), event);
-      } else {
+      else {
         parse->pending_segs = g_slist_append (parse->pending_segs, event);
         res = TRUE;
       }
+      GST_BASE_VIDEO_PARSE_UNLOCK (parse);
+
       break;
     }
     default:
@@ -684,6 +719,8 @@ gst_base_video_parse_start (GstBaseVideoParse * parse)
   gst_segment_init (&parse->state.segment, GST_FORMAT_TIME);
 
   parse->current_frame = gst_base_video_parse_new_frame (parse);
+
+  parse->seeking = FALSE;
 
   if (klass->start)
     res = klass->start (parse);
