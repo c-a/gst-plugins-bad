@@ -83,19 +83,6 @@ G_BEGIN_DECLS
  */
 #define GST_BASE_VIDEO_PARSE_UNLOCK(obj) g_mutex_unlock (((GstBaseVideoParse *) (obj))->parse_lock)
 
-/**
- * GstBaseVideoParseReturn:
- * @GST_BASE_VIDEO_PARSE_ADD: The buffer should be added to the current frame
- * @GST_BASE_VIDEO_PARSE_NEW_FRAME: The buffer begins a new frame
- * @GST_BASE_VIDEO_PARSE_DROP: The buffer should be dropped
- */
-typedef enum
-{
-  GST_BASE_VIDEO_PARSE_ADD,
-  GST_BASE_VIDEO_PARSE_NEW_FRAME,
-  GST_BASE_VIDEO_PARSE_DROP
-} GstBaseVideoParseReturn;
-
 typedef struct _GstBaseVideoParse GstBaseVideoParse;
 typedef struct _GstBaseVideoParseClass GstBaseVideoParseClass;
 
@@ -177,37 +164,37 @@ struct _GstBaseVideoParseClass
 {
   GstElementClass element_class;
 
-  gboolean                (*start)               (GstBaseVideoParse *parse);
-  gboolean                (*stop)                (GstBaseVideoParse *parse);
+  gboolean      (*start)               (GstBaseVideoParse *parse);
+  gboolean      (*stop)                (GstBaseVideoParse *parse);
 
-  void                    (*flush)               (GstBaseVideoParse *parse);
+  void          (*flush)               (GstBaseVideoParse *parse);
 
-  gint                    (*scan_for_sync)       (GstAdapter *adapter, gboolean at_eos,
-                                                  gint offset, gint n);
+  gint          (*scan_for_sync)       (GstAdapter *adapter, gboolean at_eos,
+                                        gint offset, gint n);
   
-  GstFlowReturn           (*scan_for_packet_end) (GstBaseVideoParse *parse,
-                                                  GstAdapter *adapter,
-                                                  gint *size);
+  GstFlowReturn (*scan_for_packet_end) (GstBaseVideoParse *parse,
+                                        GstAdapter *adapter,
+                                        gint *size);
   
-  GstBaseVideoParseReturn (*parse_data)          (GstBaseVideoParse *parse,
-                                                  GstBuffer *buffer);
+  GstFlowReturn (*parse_data)          (GstBaseVideoParse *parse,
+                                        GstBuffer *buffer);
 
-  GstFlowReturn           (*shape_output)        (GstBaseVideoParse *parse,
-                                                  GstVideoFrame *frame);
+  GstFlowReturn (*shape_output)        (GstBaseVideoParse *parse,
+                                        GstVideoFrame *frame);
+  
+  GstCaps      *(*get_caps)            (GstBaseVideoParse *parse);
 
-  GstCaps                *(*get_caps)            (GstBaseVideoParse *parse);
+  gboolean      (*convert)             (GstBaseVideoParse *parse,
+                                        GstFormat src_format,
+                                        gint64 src_value,
+                                        GstFormat dest_format,
+                                        gint64 * dest_value);
 
-  gboolean                (*convert)             (GstBaseVideoParse *parse,
-                                                  GstFormat src_format,
-                                                  gint64 src_value,
-                                                  GstFormat dest_format,
-                                                  gint64 * dest_value);
+  gboolean      (*sink_event)          (GstBaseVideoParse *parse,
+                                        GstEvent *event);
 
-  gboolean                (*sink_event)          (GstBaseVideoParse *parse,
-                                                  GstEvent *event);
-
-  gboolean                (*src_event)           (GstBaseVideoParse *parse,
-                                                  GstEvent *event);
+  gboolean      (*src_event)           (GstBaseVideoParse *parse,
+                                        GstEvent *event);
 };
 
 GType gst_base_video_parse_get_type (void);
@@ -221,10 +208,12 @@ void           gst_base_video_parse_set_duration   (GstBaseVideoParse *parse,
                                                     gint64 duration);
 
 void           gst_base_video_parse_lost_sync      (GstBaseVideoParse *parse);
-
-GstVideoFrame *gst_base_video_parse_get_frame      (GstBaseVideoParse *parse);
-void           gst_base_video_parse_set_sync_point (GstBaseVideoParse *parse);
-GstFlowReturn  gst_base_video_parse_push           (GstBaseVideoParse *parse,
+GstVideoFrame *gst_base_video_parse_get_frame      (GstBaseVideoParse *base_video_parse);
+void           gst_base_video_parse_add_to_frame   (GstBaseVideoParse *base_video_parse,
+                                                    GstBuffer *buffer);
+GstFlowReturn  gst_base_video_parse_finish_frame   (GstBaseVideoParse *base_video_parse);
+void           gst_base_video_parse_set_sync_point (GstBaseVideoParse *base_video_parse);
+GstFlowReturn  gst_base_video_parse_push           (GstBaseVideoParse *base_video_parse,
                                                     GstBuffer *buffer);
 
 G_END_DECLS

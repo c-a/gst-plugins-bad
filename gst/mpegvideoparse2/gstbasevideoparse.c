@@ -74,11 +74,10 @@ static GstVideoFrame *gst_base_video_parse_new_frame (GstBaseVideoParse *
 
 static GstFlowReturn gst_base_video_parse_drain (GstBaseVideoParse * parse,
     gboolean at_eos);
-static void gst_base_video_parse_add_to_frame (GstBaseVideoParse * parse,
+void gst_base_video_parse_add_to_frame (GstBaseVideoParse * parse,
     GstBuffer * buffer);
+GstFlowReturn gst_base_video_parse_finish_frame (GstBaseVideoParse * parse);
 
-static GstFlowReturn
-gst_base_video_parse_finish_frame (GstBaseVideoParse * parse);
 static void gst_base_video_parse_send_pending_segs (GstBaseVideoParse * parse);
 static void gst_base_video_parse_clear_pending_segs (GstBaseVideoParse * parse);
 
@@ -784,28 +783,13 @@ gst_base_video_parse_drain (GstBaseVideoParse * parse, gboolean at_eos)
   ret = klass->scan_for_packet_end (parse, parse->input_adapter, &next);
   while (ret == GST_FLOW_OK) {
     GstBuffer *buffer;
-    GstBaseVideoParseReturn p_ret;
 
     parse->input_buffer_timestamp =
         GST_BUFFER_TIMESTAMP (parse->input_adapter->buflist->data);
     buffer = gst_adapter_take_buffer (parse->input_adapter, next);
-    p_ret = klass->parse_data (parse, buffer);
-
-    switch (p_ret) {
-      case GST_BASE_VIDEO_PARSE_ADD:
-        gst_base_video_parse_add_to_frame (parse, buffer);
-        break;
-      case GST_BASE_VIDEO_PARSE_NEW_FRAME:
-        gst_base_video_parse_finish_frame (parse);
-        gst_base_video_parse_add_to_frame (parse, buffer);
-        break;
-      case GST_BASE_VIDEO_PARSE_DROP:
-        gst_buffer_unref (buffer);
-        break;
-      default:
-        GST_WARNING ("Invalid return from GstBaseVideoParse::parse_data");
-        break;
-    }
+    ret = klass->parse_data (parse, buffer);
+    if (ret != GST_FLOW_OK)
+      break;
 
     ret = klass->scan_for_packet_end (parse, parse->input_adapter, &next);
   }
@@ -856,7 +840,7 @@ gst_base_video_parse_chain (GstPad * pad, GstBuffer * buf)
   return gst_base_video_parse_drain (parse, FALSE);
 }
 
-static void
+void
 gst_base_video_parse_add_to_frame (GstBaseVideoParse * parse,
     GstBuffer * buffer)
 {
@@ -866,7 +850,7 @@ gst_base_video_parse_add_to_frame (GstBaseVideoParse * parse,
   gst_adapter_push (parse->output_adapter, buffer);
 }
 
-static GstFlowReturn
+GstFlowReturn
 gst_base_video_parse_finish_frame (GstBaseVideoParse * parse)
 {
   GstVideoFrame *frame = parse->current_frame;
