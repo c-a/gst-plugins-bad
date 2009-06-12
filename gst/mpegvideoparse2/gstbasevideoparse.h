@@ -116,7 +116,6 @@ struct _GstBaseVideoParse
   guint64 system_frame_number;
   guint64 next_offset;
 
-  GstClockTime input_buffer_timestamp;
   GstClockTime upstream_timestamp;
 
   GstClockTime duration;
