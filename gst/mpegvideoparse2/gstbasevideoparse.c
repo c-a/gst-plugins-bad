@@ -267,15 +267,18 @@ gst_base_video_parse_push (GstBaseVideoParse * parse, GstBuffer * buffer)
     gst_base_video_parse_send_pending_segs (parse);
   }
 
-  if (parse->seeking) {
+  gst_segment_set_last_stop (&parse->state.segment,
+      GST_FORMAT_TIME, GST_BUFFER_TIMESTAMP (buffer));
+
+  if (parse->need_newsegment) {
     if (GST_BUFFER_TIMESTAMP_IS_VALID (buffer)) {
       GstEvent *event;
       event =
           gst_event_new_new_segment (FALSE, parse->state.segment.rate,
-          GST_FORMAT_TIME, GST_BUFFER_TIMESTAMP (buffer),
-          parse->state.segment.stop, GST_BUFFER_TIMESTAMP (buffer));
+          GST_FORMAT_TIME, parse->state.segment.last_stop,
+          parse->state.segment.stop, parse->state.segment.last_stop);
       gst_pad_push_event (parse->srcpad, event);
-      parse->seeking = FALSE;
+      parse->need_newsegment = FALSE;
     } else {
       gst_buffer_unref (buffer);
       GST_BASE_VIDEO_PARSE_UNLOCK (parse);
@@ -468,6 +471,7 @@ gst_base_video_parse_src_event (GstPad * pad, GstEvent * event)
       GstSeekType cur_type, stop_type;
       gint64 cur, stop;
       gint64 tcur, tstop;
+      gboolean update;
 
       /* see if upstream can handle it */
       res = gst_pad_push_event (GST_BASE_VIDEO_PARSE_SINK_PAD (parse), event);
@@ -485,15 +489,22 @@ gst_base_video_parse_src_event (GstPad * pad, GstEvent * event)
       if (!res)
         goto convert_error;
 
-      real_seek = gst_event_new_seek (rate, GST_FORMAT_BYTES,
-          flags, cur_type, tcur, stop_type, tstop);
+      gst_segment_set_seek (&parse->state.segment, rate, format, flags,
+          cur_type, tcur, stop_type, stop, &update);
 
-      res =
-          gst_pad_push_event (GST_BASE_VIDEO_PARSE_SINK_PAD (parse), real_seek);
+      if (update) {
+        real_seek = gst_event_new_seek (rate, GST_FORMAT_BYTES,
+            flags, cur_type, tcur, stop_type, tstop);
+
+        res =
+            gst_pad_push_event (GST_BASE_VIDEO_PARSE_SINK_PAD (parse),
+            real_seek);
+      } else
+        res = TRUE;
 
       if (res) {
         GST_BASE_VIDEO_PARSE_LOCK (parse);
-        parse->seeking = TRUE;
+        parse->need_newsegment = TRUE;
         GST_BASE_VIDEO_PARSE_UNLOCK (parse);
       }
 
@@ -549,44 +560,24 @@ gst_base_video_parse_sink_event (GstPad * pad, GstEvent * event)
       if (rate <= 0.0)
         goto newseg_wrong_rate;
 
-      if (format != GST_FORMAT_TIME) {
-        GstFormat tformat;
+      if (format == GST_FORMAT_TIME) {
+        gst_segment_set_newsegment (&parse->state.segment, update,
+            rate, GST_FORMAT_TIME, start, stop, time);
 
-        tformat = GST_FORMAT_TIME;
-        res = gst_base_video_parse_convert (pad, format, start, &tformat,
-            &start);
-
-        res = gst_base_video_parse_convert (pad, format, stop, &tformat, &stop);
-
-        res = gst_base_video_parse_convert (pad, format, time, &tformat, &time);
-
-        /* if we couldn't convert we output a default open-ended
-         * TIME segment */
-        if (!res) {
-          /* set new values */
-          start = 0;
-          stop = GST_CLOCK_TIME_NONE;
-          time = 0;
+        if (parse->caps)
+          res =
+              gst_pad_push_event (GST_BASE_VIDEO_PARSE_SRC_PAD (parse), event);
+        else {
+          parse->pending_segs = g_slist_append (parse->pending_segs, event);
+          res = TRUE;
         }
+      } else {
+        GST_BASE_VIDEO_PARSE_LOCK (parse);
+        parse->need_newsegment = TRUE;
+        GST_BASE_VIDEO_PARSE_UNLOCK (parse);
 
-        event = gst_event_new_new_segment (update, rate, tformat, start,
-            stop, time);
-      }
-
-      GST_DEBUG ("newsegment %lld %lld", start, time);
-      gst_segment_set_newsegment (&parse->state.segment, update,
-          rate, GST_FORMAT_TIME, start, stop, time);
-
-      GST_BASE_VIDEO_PARSE_LOCK (parse);
-      if (parse->seeking)
-        res = TRUE;
-      else if (parse->caps)
-        res = gst_pad_push_event (GST_BASE_VIDEO_PARSE_SRC_PAD (parse), event);
-      else {
-        parse->pending_segs = g_slist_append (parse->pending_segs, event);
         res = TRUE;
       }
-      GST_BASE_VIDEO_PARSE_UNLOCK (parse);
 
       break;
     }
@@ -719,7 +710,7 @@ gst_base_video_parse_start (GstBaseVideoParse * parse)
 
   parse->current_frame = gst_base_video_parse_new_frame (parse);
 
-  parse->seeking = FALSE;
+  parse->need_newsegment = FALSE;
 
   if (klass->start)
     res = klass->start (parse);
@@ -898,8 +889,6 @@ gst_base_video_parse_finish_frame (GstBaseVideoParse * parse)
     }
 
     parse->presentation_timestamp = frame->presentation_timestamp;
-    gst_segment_set_last_stop (&parse->state.segment,
-        GST_FORMAT_TIME, parse->presentation_timestamp);
 
     frame->distance_from_sync = parse->distance_from_sync;
     parse->distance_from_sync++;
