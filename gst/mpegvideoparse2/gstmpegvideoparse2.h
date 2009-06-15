@@ -56,6 +56,8 @@ struct _GstMpegVideoParse2 {
   GstClockTime accumulated_duration;
   guint64 accumulated_size;
   guint64 byterate;
+
+  GstClockTime final_duration;
 };
 
 struct _GstMpegVideoParse2Class {

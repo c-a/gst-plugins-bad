@@ -386,6 +386,12 @@ gst_mvp2_shape_output (GstBaseVideoParse * parse, GstVideoFrame * frame)
   GstMpegVideoParse2 *mpegparse = GST_MPEG_VIDEO_PARSE2 (parse);
   GstBuffer *buf = frame->src_buffer;
 
+  if (frame->is_eos && GST_BUFFER_TIMESTAMP_IS_VALID (buf)) {
+    mpegparse->final_duration = GST_BUFFER_TIMESTAMP_IS_VALID (buf);
+    gst_base_video_parse_set_duration (parse, GST_FORMAT_TIME,
+        mpegparse->final_duration);
+  }
+
   if (GST_BUFFER_DURATION (buf) != GST_CLOCK_TIME_NONE) {
     GstFormat format;
     gint64 byte_duration;
@@ -397,15 +403,17 @@ gst_mvp2_shape_output (GstBaseVideoParse * parse, GstVideoFrame * frame)
         gst_util_uint64_scale (GST_SECOND, mpegparse->accumulated_size,
         mpegparse->accumulated_duration);
 
-    /* update duration */
-    format = GST_FORMAT_BYTES;
-    if (gst_pad_query_duration (GST_BASE_VIDEO_PARSE_SRC_PAD (parse), &format,
-            &byte_duration) && format == GST_FORMAT_BYTES) {
-      gint64 duration;
+    if (mpegparse->final_duration == GST_CLOCK_TIME_NONE) {
+      /* update duration */
+      format = GST_FORMAT_BYTES;
+      if (gst_pad_query_duration (GST_BASE_VIDEO_PARSE_SRC_PAD (parse), &format,
+              &byte_duration) && format == GST_FORMAT_BYTES) {
+        gint64 duration;
 
-      duration = gst_util_uint64_scale (GST_SECOND, byte_duration,
-          mpegparse->byterate);
-      gst_base_video_parse_set_duration (parse, GST_FORMAT_TIME, duration);
+        duration = gst_util_uint64_scale (GST_SECOND, byte_duration,
+            mpegparse->byterate);
+        gst_base_video_parse_set_duration (parse, GST_FORMAT_TIME, duration);
+      }
     }
   }
 
@@ -427,6 +435,8 @@ gst_mvp2_start (GstBaseVideoParse * parse)
   mpegparse->byterate = -1;
   mpegparse->accumulated_duration = 0;
   mpegparse->accumulated_size = 0;
+
+  mpegparse->final_duration = GST_CLOCK_TIME_NONE;
 
   return TRUE;
 }

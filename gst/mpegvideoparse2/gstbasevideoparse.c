@@ -542,6 +542,7 @@ gst_base_video_parse_sink_event (GstPad * pad, GstEvent * event)
     {
       GST_DEBUG ("EOS");
 
+      parse->eos = TRUE;
       gst_base_video_parse_flush (parse);
 
       res = gst_pad_push_event (GST_BASE_VIDEO_PARSE_SRC_PAD (parse), event);
@@ -613,6 +614,7 @@ gst_base_video_parse_flush (GstBaseVideoParse * parse)
 
   parse->discont = TRUE;
   parse->have_sync = FALSE;
+  parse->eos = FALSE;
   parse->presentation_timestamp = GST_CLOCK_TIME_NONE;
   parse->next_offset = GST_BUFFER_OFFSET_NONE;
 
@@ -910,6 +912,8 @@ gst_base_video_parse_finish_frame (GstBaseVideoParse * parse)
     } else {
       GST_BUFFER_FLAG_SET (buffer, GST_BUFFER_FLAG_DELTA_UNIT);
     }
+
+    frame->is_eos = parse->eos;
 
     frame->src_buffer = buffer;
     if (parse_class->shape_output)
