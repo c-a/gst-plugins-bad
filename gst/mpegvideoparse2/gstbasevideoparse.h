@@ -94,7 +94,6 @@ struct _GstBaseVideoParse
   GstPad *sinkpad;
   GstPad *srcpad;
 
-  GstCaps *caps;
   GSList *pending_segs;
   
   GstAdapter *input_adapter;
@@ -145,7 +144,7 @@ struct _GstBaseVideoParse
  * @shape_output:        Optional.
  *                       Determine what should be done with the current package,
  *                       e.g. push it, drop it, cache for reverse playback etc.
- * @get_caps             Should return the caps that should be set on the src pad
+ * @get_base_caps        Should return the base caps that should be set on the src pad
  * @convert:             Optional.
  *                       Convert between formats.
  * @sink_event:          Optional.
@@ -181,7 +180,7 @@ struct _GstBaseVideoParseClass
   GstFlowReturn (*shape_output)        (GstBaseVideoParse *parse,
                                         GstVideoFrame *frame);
   
-  GstCaps      *(*get_caps)            (GstBaseVideoParse *parse);
+  GstCaps      *(*get_base_caps)       (GstBaseVideoParse *parse);
 
   gboolean      (*convert)             (GstBaseVideoParse *parse,
                                         GstFormat src_format,

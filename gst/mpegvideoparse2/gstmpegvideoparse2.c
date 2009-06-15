@@ -82,22 +82,15 @@ gst_mvp2_convert (GstBaseVideoParse * parse, GstFormat src_format,
 }
 
 static GstCaps *
-gst_mvp2_get_caps (GstBaseVideoParse * parse)
+gst_mvp2_get_base_caps (GstBaseVideoParse * parse)
 {
   GstMpegVideoParse2 *mpegparse = GST_MPEG_VIDEO_PARSE2 (parse);
-  GstVideoState state;
   GstCaps *caps;
 
-  state = gst_base_video_parse_get_state (parse);
   caps = gst_caps_new_simple ("video/mpeg",
       "systemstream", G_TYPE_BOOLEAN, FALSE,
       "parsed", G_TYPE_BOOLEAN, TRUE,
       "mpegversion", G_TYPE_INT, mpegparse->version,
-      "width", G_TYPE_INT, state.width,
-      "height", G_TYPE_INT, state.height,
-      "framerate", GST_TYPE_FRACTION, state.fps_n, state.fps_d,
-      "pixel-aspect-ratio", GST_TYPE_FRACTION, state.par_n, state.par_d,
-      "interlaced", G_TYPE_BOOLEAN, state.interlaced,
       "codec_data", GST_TYPE_BUFFER, mpegparse->seq_header_buffer, NULL);
 
   return caps;
@@ -165,6 +158,10 @@ gst_mvp2_handle_sequence_extension (GstMpegVideoParse2 * mpegparse,
   if (!mpeg_util_parse_sequence_extension (&hdr, buffer))
     return FALSE;
 
+  new_buffer = gst_buffer_merge (mpegparse->seq_header_buffer, buffer);
+  gst_buffer_unref (mpegparse->seq_header_buffer);
+  mpegparse->seq_header_buffer = new_buffer;
+
   state = gst_base_video_parse_get_state (parse);
 
   state.fps_n *= (hdr.fps_n_ext + 1);
@@ -175,10 +172,6 @@ gst_mvp2_handle_sequence_extension (GstMpegVideoParse2 * mpegparse,
 
   state.interlaced = !hdr.progressive;
   gst_base_video_parse_set_state (parse, state);
-
-  new_buffer = gst_buffer_merge (mpegparse->seq_header_buffer, buffer);
-  gst_buffer_unref (mpegparse->seq_header_buffer);
-  mpegparse->seq_header_buffer = new_buffer;
 
   mpegparse->version = 2;
 
@@ -195,6 +188,8 @@ gst_mvp2_handle_sequence (GstMpegVideoParse2 * mpegparse, GstBuffer * buffer)
   if (!mpeg_util_parse_sequence_hdr (&hdr, buffer))
     return FALSE;
 
+  gst_buffer_replace (&mpegparse->seq_header_buffer, buffer);
+
   state = gst_base_video_parse_get_state (parse);
 
   state.width = hdr.width;
@@ -207,8 +202,6 @@ gst_mvp2_handle_sequence (GstMpegVideoParse2 * mpegparse, GstBuffer * buffer)
   state.par_d = hdr.par_h;
 
   gst_base_video_parse_set_state (parse, state);
-
-  gst_buffer_replace (&mpegparse->seq_header_buffer, buffer);
 
   gst_base_video_parse_set_sync_point (parse);
 
@@ -516,7 +509,7 @@ gst_mvp2_class_init (GstMpegVideoParse2Class * klass)
   baseparse_class->parse_data = GST_DEBUG_FUNCPTR (gst_mvp2_parse_data);
   baseparse_class->shape_output = GST_DEBUG_FUNCPTR (gst_mvp2_shape_output);
 
-  baseparse_class->get_caps = GST_DEBUG_FUNCPTR (gst_mvp2_get_caps);
+  baseparse_class->get_base_caps = GST_DEBUG_FUNCPTR (gst_mvp2_get_base_caps);
 
   baseparse_class->convert = GST_DEBUG_FUNCPTR (gst_mvp2_convert);
 }
