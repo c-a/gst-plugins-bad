@@ -320,7 +320,7 @@ gst_base_video_parse_frame_finish (GstBaseVideoParse * parse)
     }
     GST_BUFFER_OFFSET_END (buffer) = GST_CLOCK_TIME_NONE;
 
-    if (frame->is_sync_point) {
+    if (frame->is_keyframe) {
       GST_BUFFER_FLAG_UNSET (buffer, GST_BUFFER_FLAG_DELTA_UNIT);
     } else {
       GST_BUFFER_FLAG_SET (buffer, GST_BUFFER_FLAG_DELTA_UNIT);
@@ -362,6 +362,14 @@ gst_base_video_parse_frame_set_frame_nr (GstBaseVideoParse * parse,
   g_return_if_fail (frame_number != -1);
 
   parse->current_frame->presentation_frame_number = frame_number;
+}
+
+void
+gst_base_video_parse_frame_set_keyframe (GstBaseVideoParse * parse)
+{
+  g_return_if_fail (GST_IS_BASE_VIDEO_PARSE (parse));
+
+  parse->current_frame->is_keyframe = TRUE;
 }
 
 void
@@ -1004,6 +1012,7 @@ gst_base_video_parse_new_frame (GstBaseVideoParse * parse)
 
   frame->is_sync_point = FALSE;
   frame->is_eos = FALSE;
+  frame->is_keyframe = FALSE;
 
   frame->buffer = NULL;
 
