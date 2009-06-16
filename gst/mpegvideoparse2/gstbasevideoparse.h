@@ -142,7 +142,7 @@ struct _GstBaseVideoParse
  * @parse_data:          Parse the detected packet to determine what should be
  *                       done with it.
  * @shape_output:        Optional.
- *                       Determine what should be done with the current package,
+ *                       Determine what should be done with the current packet,
  *                       e.g. push it, drop it, cache for reverse playback etc.
  * @get_base_caps        Should return the base caps that should be set on the src pad
  * @convert:             Optional.
@@ -156,7 +156,7 @@ struct _GstBaseVideoParse
  *
  * Subclasses can override any of the available virtual methods or not, as
  * needed. At minimum @scan_for_sync, @scan_for_packet_end, @parse_data and
- * @get_caps needs to be overridden.
+ * @get_base_caps needs to be overridden.
  */
 struct _GstBaseVideoParseClass
 {
