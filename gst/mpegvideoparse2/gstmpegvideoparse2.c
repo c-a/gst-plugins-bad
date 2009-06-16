@@ -241,15 +241,13 @@ gst_mvp2_handle_picture (GstMpegVideoParse2 * mpegparse, GstBuffer * buffer)
 {
   GstBaseVideoParse *parse = GST_BASE_VIDEO_PARSE (mpegparse);
   MPEGPictureHdr hdr;
-  GstVideoFrame *frame;
 
   if (!mpeg_util_parse_picture_hdr (&hdr, buffer))
     return FALSE;
 
-  if (mpegparse->gop_start != -1) {
-    frame = gst_base_video_parse_get_frame (parse);
-    frame->presentation_frame_number = mpegparse->gop_start + hdr.tsn;
-  }
+  if (mpegparse->gop_start != -1)
+    gst_base_video_parse_frame_set_frame_nr (parse,
+        mpegparse->gop_start + hdr.tsn);
 
   return TRUE;
 }
@@ -260,7 +258,7 @@ gst_mvp2_finish_frame (GstMpegVideoParse2 * mpegparse)
   GstBaseVideoParse *parse = (GST_BASE_VIDEO_PARSE (mpegparse));
 
   mpegparse->prev_packet = 0;
-  return gst_base_video_parse_finish_frame (parse);
+  return gst_base_video_parse_frame_finish (parse);
 }
 
 static GstFlowReturn
@@ -288,14 +286,8 @@ gst_mvp2_parse_data (GstBaseVideoParse * parse, GstBuffer * buffer)
     }
 
     /* use the first sequence as a sync point */
-    else {
-      GstVideoFrame *frame;
-
-      frame = gst_base_video_parse_get_frame (parse);
-      frame->presentation_timestamp = 0;
-      frame->presentation_frame_number = 0;
+    else
       gst_base_video_parse_set_sync_point (parse);
-    }
   }
 
   switch (start_code) {
@@ -304,7 +296,7 @@ gst_mvp2_parse_data (GstBaseVideoParse * parse, GstBuffer * buffer)
       GST_DEBUG_OBJECT (mpegparse, "MPEG_PACKET_SEQUENCE");
 
       if (mpegparse->state != GST_MVP2_STATE_NEED_SEQUENCE)
-        gst_base_video_parse_finish_frame (parse);
+        gst_base_video_parse_frame_finish (parse);
 
       if (!gst_mvp2_handle_sequence (mpegparse, buffer))
         goto invalid_packet;
@@ -364,7 +356,7 @@ gst_mvp2_parse_data (GstBaseVideoParse * parse, GstBuffer * buffer)
   }
 
   mpegparse->prev_packet = start_code;
-  gst_base_video_parse_add_to_frame (parse, buffer);
+  gst_base_video_parse_frame_add (parse, buffer);
 
   return ret;
 
@@ -374,10 +366,11 @@ invalid_packet:
 }
 
 static GstFlowReturn
-gst_mvp2_shape_output (GstBaseVideoParse * parse, GstVideoFrame * frame)
+gst_mvp2_shape_output (GstBaseVideoParse * parse,
+    GstBaseVideoParseFrame * frame)
 {
   GstMpegVideoParse2 *mpegparse = GST_MPEG_VIDEO_PARSE2 (parse);
-  GstBuffer *buf = frame->src_buffer;
+  GstBuffer *buf = frame->buffer;
 
   if (frame->is_eos && GST_BUFFER_TIMESTAMP_IS_VALID (buf)) {
     mpegparse->final_duration = GST_BUFFER_TIMESTAMP_IS_VALID (buf);
