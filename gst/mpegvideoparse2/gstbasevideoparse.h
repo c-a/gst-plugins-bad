@@ -124,6 +124,9 @@ struct _GstBaseVideoParse
   GstAdapter *output_adapter;
 
   GstVideoState state;
+
+  GstIndex *index;
+  gint index_id;
   
   gint reorder_depth;
   gint64 timestamp_offset;

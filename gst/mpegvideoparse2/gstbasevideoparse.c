@@ -49,6 +49,9 @@ static void gst_base_video_parse_init (GstBaseVideoParse * parse,
     GstBaseVideoParseClass * klass);
 
 /* GstElement */
+static void gst_base_video_parse_set_index (GstElement * element,
+    GstIndex * index);
+static GstIndex *gst_base_video_parse_get_index (GstElement * element);
 static GstStateChangeReturn gst_base_video_parse_change_state (GstElement *
     element, GstStateChange transition);
 
@@ -61,6 +64,9 @@ static gboolean gst_base_video_parse_sink_event (GstPad * pad,
 static GstFlowReturn gst_base_video_parse_chain (GstPad * pad, GstBuffer * buf);
 
 /* Utility */
+static gboolean
+gst_base_video_parse_index_find_offset (GstBaseVideoParse * parse,
+    gint64 time, gint64 * offset);
 static void gst_base_video_parse_flush (GstBaseVideoParse * parse);
 static gboolean
 gst_base_video_parse_convert (GstPad * pad,
@@ -109,6 +115,8 @@ gst_base_video_parse_class_init (GstBaseVideoParseClass * klass)
 
   gobject_class->finalize = gst_base_video_parse_finalize;
 
+  element_class->set_index = gst_base_video_parse_set_index;
+  element_class->get_index = gst_base_video_parse_get_index;
   element_class->change_state = gst_base_video_parse_change_state;
 }
 
@@ -125,6 +133,9 @@ gst_base_video_parse_finalize (GObject * object)
   }
   if (parse->output_adapter) {
     g_object_unref (parse->output_adapter);
+  }
+  if (parse->index) {
+    gst_object_unref (parse->index);
   }
 
   g_mutex_free (parse->parse_lock);
@@ -171,6 +182,8 @@ gst_base_video_parse_init (GstBaseVideoParse * parse,
 
   parse->input_adapter = gst_adapter_new ();
   parse->output_adapter = gst_adapter_new ();
+
+  parse->index = NULL;
 
   parse->parse_lock = g_mutex_new ();
 }
@@ -311,6 +324,16 @@ gst_base_video_parse_frame_finish (GstBaseVideoParse * parse)
     frame->decode_timestamp =
         gst_base_video_parse_get_timestamp (parse, frame->decode_frame_number);
 
+    /* add index association */
+    if (parse->index && frame->byte_offset != GST_CLOCK_TIME_NONE &&
+        GST_CLOCK_TIME_IS_VALID (frame->presentation_timestamp)) {
+      gst_index_add_association (parse->index, parse->index_id,
+          frame->is_keyframe ? GST_ASSOCIATION_FLAG_KEY_UNIT :
+          GST_ASSOCIATION_FLAG_NONE,
+          GST_FORMAT_TIME, frame->presentation_timestamp,
+          GST_FORMAT_BYTES, frame->byte_offset, NULL);
+    }
+
     GST_BUFFER_TIMESTAMP (buffer) = frame->presentation_timestamp;
     GST_BUFFER_DURATION (buffer) = frame->presentation_duration;
     if (frame->decode_frame_number < 0) {
@@ -445,6 +468,34 @@ gst_base_video_parse_push (GstBaseVideoParse * parse, GstBuffer * buffer)
 /*
  * GstElement functions
  */
+static void
+gst_base_video_parse_set_index (GstElement * element, GstIndex * index)
+{
+  GstBaseVideoParse *parse = GST_BASE_VIDEO_PARSE (element);
+
+  GST_OBJECT_LOCK (parse);
+  if (parse->index)
+    gst_object_unref (parse->index);
+  parse->index = gst_object_ref (index);
+  GST_OBJECT_UNLOCK (parse);
+
+  gst_index_get_writer_id (index, GST_OBJECT (element), &parse->index_id);
+}
+
+static GstIndex *
+gst_base_video_parse_get_index (GstElement * element)
+{
+  GstBaseVideoParse *parse = GST_BASE_VIDEO_PARSE (element);
+  GstIndex *result = NULL;
+
+  GST_OBJECT_LOCK (parse);
+  if (parse->index)
+    result = gst_object_ref (parse->index);
+  GST_OBJECT_UNLOCK (parse);
+
+  return result;
+}
+
 static GstStateChangeReturn
 gst_base_video_parse_change_state (GstElement * element,
     GstStateChange transition)
@@ -599,13 +650,14 @@ gst_base_video_parse_src_event (GstPad * pad, GstEvent * event)
   switch (GST_EVENT_TYPE (event)) {
     case GST_EVENT_SEEK:
     {
-      GstFormat format, tformat;
+      GstFormat format;
       gdouble rate;
       GstEvent *real_seek;
       GstSeekFlags flags;
-      GstSeekType cur_type, stop_type;
-      gint64 cur, stop;
-      gint64 tcur, tstop;
+      GstSeekType start_type, stop_type;
+      gint64 start, stop;
+      GstSegment seeksegment;
+      gint64 offset;
       gboolean update;
 
       /* see if upstream can handle it */
@@ -613,23 +665,33 @@ gst_base_video_parse_src_event (GstPad * pad, GstEvent * event)
       if (res)
         goto done;
 
-      gst_event_parse_seek (event, &rate, &format, &flags, &cur_type,
-          &cur, &stop_type, &stop);
+      gst_event_parse_seek (event, &rate, &format, &flags, &start_type,
+          &start, &stop_type, &stop);
 
-      tformat = GST_FORMAT_BYTES;
-      res = gst_base_video_parse_convert (pad, format, cur, &tformat, &tcur);
-      if (!res)
-        goto convert_error;
-      res = gst_base_video_parse_convert (pad, format, stop, &tformat, &tstop);
-      if (!res)
-        goto convert_error;
+      if (format != GST_FORMAT_TIME) {
+        res = FALSE;
+        goto done;
+      }
 
-      gst_segment_set_seek (&parse->state.segment, rate, format, flags,
-          cur_type, tcur, stop_type, stop, &update);
+      /* Work on a copy until we are sure the seek succeeded. */
+      memcpy (&seeksegment, &parse->state.segment, sizeof (GstSegment));
+      gst_segment_set_seek (&seeksegment, rate, format, flags, start_type,
+          start, stop_type, stop, &update);
 
       if (update) {
+        if (!gst_base_video_parse_index_find_offset (parse, seeksegment.start,
+                &offset)) {
+          GstFormat tformat;
+
+          tformat = GST_FORMAT_BYTES;
+          res = gst_base_video_parse_convert (pad, format, seeksegment.start,
+              &tformat, &offset);
+          if (!res)
+            goto convert_error;
+        }
+
         real_seek = gst_event_new_seek (rate, GST_FORMAT_BYTES,
-            flags, cur_type, tcur, stop_type, tstop);
+            flags, GST_SEEK_TYPE_SET, offset, GST_SEEK_TYPE_NONE, 0);
 
         res =
             gst_pad_push_event (GST_BASE_VIDEO_PARSE_SINK_PAD (parse),
@@ -639,6 +701,7 @@ gst_base_video_parse_src_event (GstPad * pad, GstEvent * event)
 
       if (res) {
         GST_BASE_VIDEO_PARSE_LOCK (parse);
+        memcpy (&parse->state.segment, &seeksegment, sizeof (GstSegment));
         parse->need_newsegment = TRUE;
         GST_BASE_VIDEO_PARSE_UNLOCK (parse);
       }
@@ -679,6 +742,9 @@ gst_base_video_parse_sink_event (GstPad * pad, GstEvent * event)
 
       parse->eos = TRUE;
       gst_base_video_parse_flush (parse);
+
+      if (parse->index)
+        gst_index_commit (parse->index, parse->index_id);
 
       res = gst_pad_push_event (GST_BASE_VIDEO_PARSE_SRC_PAD (parse), event);
       break;
@@ -733,6 +799,44 @@ newseg_wrong_rate:
 /*
  * Utility functions
  */
+
+static gboolean
+gst_base_video_parse_index_find_offset (GstBaseVideoParse * parse,
+    gint64 time, gint64 * offset)
+{
+  gint64 bytes;
+  gint64 found_time;
+  gboolean res = FALSE;
+
+  if (parse->index) {
+    GstIndexEntry *entry;
+
+    /* Let's check if we have an index entry for that seek time */
+    entry = gst_index_get_assoc_entry (parse->index, parse->index_id,
+        GST_INDEX_LOOKUP_BEFORE, GST_ASSOCIATION_FLAG_KEY_UNIT,
+        GST_FORMAT_TIME, time);
+
+    if (entry) {
+      gst_index_entry_assoc_map (entry, GST_FORMAT_BYTES, &bytes);
+      gst_index_entry_assoc_map (entry, GST_FORMAT_TIME, &found_time);
+
+      GST_DEBUG_OBJECT (parse, "found index entry for %" GST_TIME_FORMAT
+          " at %" GST_TIME_FORMAT ", seeking to %" G_GINT64_FORMAT,
+          GST_TIME_ARGS (time), GST_TIME_ARGS (found_time), bytes);
+
+      res = TRUE;
+    } else {
+      GST_DEBUG_OBJECT (parse, "no index entry found for %" GST_TIME_FORMAT,
+          GST_TIME_ARGS (time));
+    }
+  }
+
+  if (res)
+    *offset = bytes;
+
+  return res;
+}
+
 static void
 gst_base_video_parse_flush (GstBaseVideoParse * parse)
 {
