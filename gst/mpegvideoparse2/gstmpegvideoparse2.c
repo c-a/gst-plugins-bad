@@ -245,6 +245,9 @@ gst_mvp2_handle_picture (GstMpegVideoParse2 * mpegparse, GstBuffer * buffer)
   if (!mpeg_util_parse_picture_hdr (&hdr, buffer))
     return FALSE;
 
+  if (hdr.pic_type == I_FRAME)
+    gst_base_video_parse_frame_set_keyframe (parse);
+
   if (mpegparse->gop_start != -1)
     gst_base_video_parse_frame_set_frame_nr (parse,
         mpegparse->gop_start + hdr.tsn);
