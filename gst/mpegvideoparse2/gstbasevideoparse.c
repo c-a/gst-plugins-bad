@@ -349,6 +349,12 @@ gst_base_video_parse_frame_finish (GstBaseVideoParse * parse)
       GST_BUFFER_FLAG_SET (buffer, GST_BUFFER_FLAG_DELTA_UNIT);
     }
 
+    if (frame->is_discont) {
+      GST_BUFFER_FLAG_SET (buffer, GST_BUFFER_FLAG_DISCONT);
+    } else {
+      GST_BUFFER_FLAG_UNSET (buffer, GST_BUFFER_FLAG_DISCONT);
+    }
+
     frame->buffer = buffer;
     if (parse_class->shape_output)
       ret = parse_class->shape_output (parse, frame);
@@ -451,13 +457,6 @@ gst_base_video_parse_push (GstBaseVideoParse * parse, GstBuffer * buffer)
       GST_TIME_ARGS (GST_BUFFER_DURATION (buffer)),
       GST_TIME_ARGS (GST_BUFFER_OFFSET (buffer)),
       GST_TIME_ARGS (GST_BUFFER_OFFSET_END (buffer)));
-
-  if (parse->discont) {
-    GST_BUFFER_FLAG_SET (buffer, GST_BUFFER_FLAG_DISCONT);
-    parse->discont = FALSE;
-  } else {
-    GST_BUFFER_FLAG_UNSET (buffer, GST_BUFFER_FLAG_DISCONT);
-  }
 
   return gst_pad_push (GST_BASE_VIDEO_PARSE_SRC_PAD (parse), buffer);
 }
@@ -846,8 +845,8 @@ gst_base_video_parse_flush (GstBaseVideoParse * parse)
   }
 
   gst_base_video_parse_frame_finish (parse);
+  parse->current_frame->is_discont = TRUE;
 
-  parse->discont = TRUE;
   parse->have_sync = FALSE;
   parse->presentation_timestamp = GST_CLOCK_TIME_NONE;
   parse->next_offset = GST_BUFFER_OFFSET_NONE;
@@ -944,7 +943,6 @@ gst_base_video_parse_start (GstBaseVideoParse * parse)
 
   gst_base_video_parse_init_state (&parse->state);
 
-  parse->discont = TRUE;
   parse->have_sync = FALSE;
 
   parse->system_frame_number = 0;
@@ -1112,6 +1110,7 @@ gst_base_video_parse_new_frame (GstBaseVideoParse * parse)
   frame->is_sync_point = FALSE;
   frame->is_eos = FALSE;
   frame->is_keyframe = FALSE;
+  frame->is_discont = FALSE;
 
   frame->buffer = NULL;
 

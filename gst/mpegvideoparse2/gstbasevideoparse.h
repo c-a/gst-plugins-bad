@@ -103,6 +103,7 @@ struct _GstBaseVideoParseFrame
   gboolean is_sync_point;
   gboolean is_eos;
   gboolean is_keyframe;
+  gboolean is_discont;
 
   GstBuffer *buffer;
 };
@@ -132,7 +133,6 @@ struct _GstBaseVideoParse
   gint64 timestamp_offset;
 
   gboolean have_sync;
-  gboolean discont;
 
   GstBaseVideoParseFrame *current_frame;
   gint distance_from_sync;
