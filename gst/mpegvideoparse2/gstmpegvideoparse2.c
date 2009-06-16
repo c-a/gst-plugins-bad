@@ -378,18 +378,18 @@ gst_mvp2_shape_output (GstBaseVideoParse * parse,
         mpegparse->final_duration);
   }
 
-  if (GST_BUFFER_DURATION (buf) != GST_CLOCK_TIME_NONE) {
-    GstFormat format;
-    gint64 byte_duration;
-
-    mpegparse->accumulated_duration += GST_BUFFER_DURATION (buf);
-    mpegparse->accumulated_size += GST_BUFFER_SIZE (buf);
-
+  if (GST_BUFFER_TIMESTAMP_IS_VALID (buf) &&
+      frame->byte_offset != GST_BUFFER_OFFSET_NONE &&
+      frame->byte_offset > mpegparse->byte_offset) {
+    mpegparse->byte_offset = frame->byte_offset;
     mpegparse->byterate =
-        gst_util_uint64_scale (GST_SECOND, mpegparse->accumulated_size,
-        mpegparse->accumulated_duration);
+        gst_util_uint64_scale (GST_SECOND, mpegparse->byte_offset,
+        GST_BUFFER_TIMESTAMP (buf));
 
     if (mpegparse->final_duration == GST_CLOCK_TIME_NONE) {
+      GstFormat format;
+      gint64 byte_duration;
+
       /* update duration */
       format = GST_FORMAT_BYTES;
       if (gst_pad_query_duration (GST_BASE_VIDEO_PARSE_SRC_PAD (parse), &format,
@@ -419,8 +419,7 @@ gst_mvp2_start (GstBaseVideoParse * parse)
   mpegparse->seq_header_buffer = NULL;
 
   mpegparse->byterate = -1;
-  mpegparse->accumulated_duration = 0;
-  mpegparse->accumulated_size = 0;
+  mpegparse->byte_offset = 0;
 
   mpegparse->final_duration = GST_CLOCK_TIME_NONE;
 

@@ -53,8 +53,7 @@ struct _GstMpegVideoParse2 {
   GstBuffer *seq_header_buffer;
   gint version;
 
-  GstClockTime accumulated_duration;
-  guint64 accumulated_size;
+  guint64 byte_offset;
   guint64 byterate;
 
   GstClockTime final_duration;
