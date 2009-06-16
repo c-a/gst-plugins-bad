@@ -349,9 +349,6 @@ gst_base_video_parse_frame_finish (GstBaseVideoParse * parse)
       GST_BUFFER_FLAG_SET (buffer, GST_BUFFER_FLAG_DELTA_UNIT);
     }
 
-    if (frame->byte_offset != GST_BUFFER_OFFSET_NONE)
-      frame->is_eos = parse->eos;
-
     frame->buffer = buffer;
     if (parse_class->shape_output)
       ret = parse_class->shape_output (parse, frame);
@@ -740,7 +737,7 @@ gst_base_video_parse_sink_event (GstPad * pad, GstEvent * event)
     {
       GST_DEBUG ("EOS");
 
-      parse->eos = TRUE;
+      parse->current_frame->is_eos = TRUE;
       gst_base_video_parse_flush (parse);
 
       if (parse->index)
@@ -852,7 +849,6 @@ gst_base_video_parse_flush (GstBaseVideoParse * parse)
 
   parse->discont = TRUE;
   parse->have_sync = FALSE;
-  parse->eos = FALSE;
   parse->presentation_timestamp = GST_CLOCK_TIME_NONE;
   parse->next_offset = GST_BUFFER_OFFSET_NONE;
 
@@ -948,7 +944,6 @@ gst_base_video_parse_start (GstBaseVideoParse * parse)
 
   gst_base_video_parse_init_state (&parse->state);
 
-  parse->eos = FALSE;
   parse->discont = TRUE;
   parse->have_sync = FALSE;
 

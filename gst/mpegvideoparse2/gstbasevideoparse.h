@@ -133,7 +133,6 @@ struct _GstBaseVideoParse
 
   gboolean have_sync;
   gboolean discont;
-  gboolean eos;
 
   GstBaseVideoParseFrame *current_frame;
   gint distance_from_sync;
