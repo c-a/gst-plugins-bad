@@ -394,7 +394,7 @@ gst_mvp2_shape_output (GstBaseVideoParse * parse,
   GstBuffer *buf = frame->buffer;
 
   if (frame->is_eos && GST_BUFFER_TIMESTAMP_IS_VALID (buf)) {
-    mpegparse->final_duration = GST_BUFFER_TIMESTAMP_IS_VALID (buf);
+    mpegparse->final_duration = GST_BUFFER_TIMESTAMP (buf);
     gst_base_video_parse_set_duration (parse, GST_FORMAT_TIME,
         mpegparse->final_duration);
   }

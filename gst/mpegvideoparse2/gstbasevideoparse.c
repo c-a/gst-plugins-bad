@@ -562,9 +562,11 @@ gst_base_video_parse_src_query (GstPad * pad, GstQuery * query)
       gint64 value;
 
       /* see if upstream can handle it */
-      res = gst_pad_query_default (pad, query);
-      if (res)
+      res = gst_pad_query (parse->sinkpad, gst_query_ref (query));
+      if (res) {
+        gst_query_unref (query);
         goto done;
+      }
 
       gst_query_parse_position (query, &format, NULL);
 
@@ -578,6 +580,7 @@ gst_base_video_parse_src_query (GstPad * pad, GstQuery * query)
       if (res)
         gst_query_set_position (query, format, value);
 
+      gst_query_unref (query);
       break;
     }
     case GST_QUERY_DURATION:
@@ -586,9 +589,11 @@ gst_base_video_parse_src_query (GstPad * pad, GstQuery * query)
       gint64 duration;
 
       /* see if upstream can handle it */
-      res = gst_pad_query_default (pad, query);
-      if (res)
+      res = gst_pad_query (parse->sinkpad, gst_query_ref (query));
+      if (res) {
+        gst_query_unref (query);
         goto done;
+      }
 
       gst_query_parse_duration (query, &format, NULL);
 
@@ -603,6 +608,7 @@ gst_base_video_parse_src_query (GstPad * pad, GstQuery * query)
       if (res)
         gst_query_set_duration (query, format, duration);
 
+      gst_query_unref (query);
       break;
     }
     case GST_QUERY_CONVERT:
@@ -611,9 +617,11 @@ gst_base_video_parse_src_query (GstPad * pad, GstQuery * query)
       gint64 src_val, dest_val;
 
       /* see if upstream can handle it */
-      res = gst_pad_query_default (pad, query);
-      if (res)
+      res = gst_pad_query (parse->sinkpad, gst_query_ref (query));
+      if (res) {
+        gst_query_unref (query);
         goto done;
+      }
 
       GST_WARNING ("query convert");
 
@@ -623,6 +631,7 @@ gst_base_video_parse_src_query (GstPad * pad, GstQuery * query)
       if (res)
         gst_query_set_convert (query, src_fmt, src_val, dest_fmt, dest_val);
 
+      gst_query_unref (query);
       break;
     }
     default:
@@ -658,13 +667,13 @@ gst_base_video_parse_src_event (GstPad * pad, GstEvent * event)
       gint64 offset;
       gboolean update;
 
-      /* see if upstream can handle it */
-      res = gst_pad_push_event (GST_BASE_VIDEO_PARSE_SINK_PAD (parse), event);
-      if (res)
-        goto done;
-
       gst_event_parse_seek (event, &rate, &format, &flags, &start_type,
           &start, &stop_type, &stop);
+
+      /* see if upstream can handle it */
+      res = gst_pad_push_event (parse->sinkpad, event);
+      if (res)
+        goto done;
 
       if (format != GST_FORMAT_TIME) {
         res = FALSE;
@@ -691,9 +700,7 @@ gst_base_video_parse_src_event (GstPad * pad, GstEvent * event)
         real_seek = gst_event_new_seek (rate, GST_FORMAT_BYTES,
             flags, GST_SEEK_TYPE_SET, offset, GST_SEEK_TYPE_NONE, 0);
 
-        res =
-            gst_pad_push_event (GST_BASE_VIDEO_PARSE_SINK_PAD (parse),
-            real_seek);
+        res = gst_pad_push_event (parse->sinkpad, real_seek);
       } else
         res = TRUE;
 
@@ -732,7 +739,7 @@ gst_base_video_parse_sink_event (GstPad * pad, GstEvent * event)
   switch (GST_EVENT_TYPE (event)) {
     case GST_EVENT_FLUSH_STOP:
       gst_base_video_parse_flush (parse);
-      res = gst_pad_push_event (GST_BASE_VIDEO_PARSE_SRC_PAD (parse), event);
+      res = gst_pad_push_event (parse->srcpad, event);
       break;
     case GST_EVENT_EOS:
     {
@@ -744,7 +751,7 @@ gst_base_video_parse_sink_event (GstPad * pad, GstEvent * event)
       if (parse->index)
         gst_index_commit (parse->index, parse->index_id);
 
-      res = gst_pad_push_event (GST_BASE_VIDEO_PARSE_SRC_PAD (parse), event);
+      res = gst_pad_push_event (parse->srcpad, event);
       break;
     }
     case GST_EVENT_NEWSEGMENT:
@@ -775,6 +782,7 @@ gst_base_video_parse_sink_event (GstPad * pad, GstEvent * event)
         parse->need_newsegment = TRUE;
         GST_BASE_VIDEO_PARSE_UNLOCK (parse);
 
+        gst_event_unref (event);
         res = TRUE;
       }
 
