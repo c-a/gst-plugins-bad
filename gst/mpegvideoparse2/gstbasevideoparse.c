@@ -268,7 +268,7 @@ gst_base_video_parse_frame_add (GstBaseVideoParse * parse, GstBuffer * buffer)
   g_return_if_fail (GST_IS_BASE_VIDEO_PARSE (parse));
 
   if (gst_adapter_available (parse->output_adapter) == 0) {
-    parse->current_frame->presentation_timestamp = parse->upstream_timestamp;
+    parse->current_frame->upstream_timestamp = parse->upstream_timestamp;
     parse->current_frame->byte_offset = parse->byte_offset;
   }
 
@@ -299,6 +299,9 @@ gst_base_video_parse_frame_finish (GstBaseVideoParse * parse)
       frame->presentation_duration = gst_util_uint64_scale (GST_SECOND,
           parse->state.fps_d, parse->state.fps_n);
     }
+
+    if (GST_CLOCK_TIME_IS_VALID (frame->upstream_timestamp))
+      frame->presentation_timestamp = frame->upstream_timestamp;
 
     if (frame->is_sync_point) {
       parse->timestamp_offset =
