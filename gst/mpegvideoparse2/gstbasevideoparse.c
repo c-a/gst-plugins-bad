@@ -562,11 +562,9 @@ gst_base_video_parse_src_query (GstPad * pad, GstQuery * query)
       gint64 value;
 
       /* see if upstream can handle it */
-      res = gst_pad_query (parse->sinkpad, gst_query_ref (query));
-      if (res) {
-        gst_query_unref (query);
+      res = gst_pad_query (parse->sinkpad, query);
+      if (res)
         goto done;
-      }
 
       gst_query_parse_position (query, &format, NULL);
 
@@ -580,7 +578,6 @@ gst_base_video_parse_src_query (GstPad * pad, GstQuery * query)
       if (res)
         gst_query_set_position (query, format, value);
 
-      gst_query_unref (query);
       break;
     }
     case GST_QUERY_DURATION:
@@ -589,11 +586,9 @@ gst_base_video_parse_src_query (GstPad * pad, GstQuery * query)
       gint64 duration;
 
       /* see if upstream can handle it */
-      res = gst_pad_query (parse->sinkpad, gst_query_ref (query));
-      if (res) {
-        gst_query_unref (query);
+      res = gst_pad_query (parse->sinkpad, query);
+      if (res)
         goto done;
-      }
 
       gst_query_parse_duration (query, &format, NULL);
 
@@ -608,7 +603,6 @@ gst_base_video_parse_src_query (GstPad * pad, GstQuery * query)
       if (res)
         gst_query_set_duration (query, format, duration);
 
-      gst_query_unref (query);
       break;
     }
     case GST_QUERY_CONVERT:
@@ -617,11 +611,9 @@ gst_base_video_parse_src_query (GstPad * pad, GstQuery * query)
       gint64 src_val, dest_val;
 
       /* see if upstream can handle it */
-      res = gst_pad_query (parse->sinkpad, gst_query_ref (query));
-      if (res) {
-        gst_query_unref (query);
+      res = gst_pad_query (parse->sinkpad, query);
+      if (res)
         goto done;
-      }
 
       GST_WARNING ("query convert");
 
@@ -631,7 +623,6 @@ gst_base_video_parse_src_query (GstPad * pad, GstQuery * query)
       if (res)
         gst_query_set_convert (query, src_fmt, src_val, dest_fmt, dest_val);
 
-      gst_query_unref (query);
       break;
     }
     default:
