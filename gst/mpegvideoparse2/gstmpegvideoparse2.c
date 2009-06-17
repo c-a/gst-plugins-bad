@@ -150,9 +150,7 @@ static gboolean
 gst_mvp2_handle_sequence_extension (GstMpegVideoParse2 * mpegparse,
     GstBuffer * buffer)
 {
-  GstBaseVideoParse *parse = GST_BASE_VIDEO_PARSE (mpegparse);
   MPEGSeqExtHdr hdr;
-  GstVideoState state;
   GstBuffer *new_buffer;
 
   if (!mpeg_util_parse_sequence_extension (&hdr, buffer))
@@ -162,17 +160,13 @@ gst_mvp2_handle_sequence_extension (GstMpegVideoParse2 * mpegparse,
   gst_buffer_unref (mpegparse->seq_header_buffer);
   mpegparse->seq_header_buffer = new_buffer;
 
-  state = gst_base_video_parse_get_state (parse);
+  mpegparse->fps_n *= (hdr.fps_n_ext + 1);
+  mpegparse->fps_d *= (hdr.fps_d_ext + 1);
 
-  state.fps_n *= (hdr.fps_n_ext + 1);
-  state.fps_d *= (hdr.fps_d_ext + 1);
+  mpegparse->width += (hdr.horiz_size_ext << 12);
+  mpegparse->height += (hdr.vert_size_ext << 12);
 
-  state.width += (hdr.horiz_size_ext << 12);
-  state.height += (hdr.vert_size_ext << 12);
-
-  state.interlaced = !hdr.progressive;
-  gst_base_video_parse_set_state (parse, state);
-
+  mpegparse->interlaced = !hdr.progressive;
   mpegparse->version = 2;
 
   return TRUE;
@@ -183,25 +177,20 @@ gst_mvp2_handle_sequence (GstMpegVideoParse2 * mpegparse, GstBuffer * buffer)
 {
   GstBaseVideoParse *parse = GST_BASE_VIDEO_PARSE (mpegparse);
   MPEGSeqHdr hdr;
-  GstVideoState state;
 
   if (!mpeg_util_parse_sequence_hdr (&hdr, buffer))
     return FALSE;
 
   gst_buffer_replace (&mpegparse->seq_header_buffer, buffer);
 
-  state = gst_base_video_parse_get_state (parse);
+  mpegparse->width = hdr.width;
+  mpegparse->height = hdr.height;
 
-  state.width = hdr.width;
-  state.height = hdr.height;
+  mpegparse->fps_n = hdr.fps_n;
+  mpegparse->fps_d = hdr.fps_d;
 
-  state.fps_n = hdr.fps_n;
-  state.fps_d = hdr.fps_d;
-
-  state.par_n = hdr.par_w;
-  state.par_d = hdr.par_h;
-
-  gst_base_video_parse_set_state (parse, state);
+  mpegparse->par_n = hdr.par_w;
+  mpegparse->par_d = hdr.par_h;
 
   gst_base_video_parse_set_sync_point (parse);
 
@@ -255,6 +244,26 @@ gst_mvp2_handle_picture (GstMpegVideoParse2 * mpegparse, GstBuffer * buffer)
   return TRUE;
 }
 
+static void
+gst_mvp2_set_state (GstMpegVideoParse2 * mpegparse)
+{
+  GstBaseVideoParse *parse = GST_BASE_VIDEO_PARSE (mpegparse);
+  GstVideoState state;
+
+  state = gst_base_video_parse_get_state (parse);
+
+  state.width = mpegparse->width;
+  state.height = mpegparse->height;
+
+  state.fps_n = mpegparse->fps_n;
+  state.fps_d = mpegparse->fps_d;
+
+  state.par_n = mpegparse->par_n;
+  state.par_d = mpegparse->par_d;
+
+  gst_base_video_parse_set_state (parse, state);
+}
+
 GstFlowReturn
 gst_mvp2_finish_frame (GstMpegVideoParse2 * mpegparse)
 {
@@ -304,7 +313,9 @@ gst_mvp2_parse_data (GstBaseVideoParse * parse, GstBuffer * buffer)
 
       if (!gst_mvp2_handle_sequence (mpegparse, buffer))
         goto invalid_packet;
-      break;
+
+      mpegparse->sequence = TRUE;
+      goto done;
     }
     case MPEG_PACKET_GOP:
     {
@@ -359,6 +370,12 @@ gst_mvp2_parse_data (GstBaseVideoParse * parse, GstBuffer * buffer)
     }
   }
 
+  if (mpegparse->sequence) {
+    gst_mvp2_set_state (mpegparse);
+    mpegparse->sequence = FALSE;
+  }
+
+done:
   mpegparse->prev_packet = start_code;
   gst_base_video_parse_frame_add (parse, buffer);
 
@@ -417,10 +434,14 @@ gst_mvp2_start (GstBaseVideoParse * parse)
 
   mpegparse->state = GST_MVP2_STATE_NEED_SEQUENCE;
   mpegparse->prev_packet = -1;
-  mpegparse->gop_start = 0;
+
+  mpegparse->sequence = FALSE;
 
   mpegparse->version = 1;
+  mpegparse->interlaced = FALSE;
   mpegparse->seq_header_buffer = NULL;
+
+  mpegparse->gop_start = 0;
 
   mpegparse->byterate = -1;
   mpegparse->byte_offset = 0;

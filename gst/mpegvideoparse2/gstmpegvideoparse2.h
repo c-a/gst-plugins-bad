@@ -48,11 +48,18 @@ struct _GstMpegVideoParse2 {
 
   GstMVP2State state;
   gint prev_packet;
-  guint64 gop_start;
 
-  GstBuffer *seq_header_buffer;
+  gboolean sequence;
+  
+  gint width, height;
+  gint fps_n, fps_d;
+  gint par_n, par_d;
+  gboolean interlaced;
   gint version;
-
+  GstBuffer *seq_header_buffer;
+  
+  guint64 gop_start;
+  
   guint64 byte_offset;
   guint64 byterate;
 
