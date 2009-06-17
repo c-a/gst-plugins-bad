@@ -493,17 +493,11 @@ gst_mvp2_base_init (gpointer g_class)
 static void
 gst_mvp2_init (GstMpegVideoParse2 * mpegparse, GstMpegVideoParse2Class * klass)
 {
-  mpegparse->seq_header_buffer = NULL;
 }
 
 static void
 gst_mvp2_finalize (GObject * object)
 {
-  GstMpegVideoParse2 *mpegparse = GST_MPEG_VIDEO_PARSE2 (object);
-
-  if (mpegparse->seq_header_buffer)
-    gst_buffer_unref (mpegparse->seq_header_buffer);
-
   G_OBJECT_CLASS (parent_class)->finalize (object);
 }
 
