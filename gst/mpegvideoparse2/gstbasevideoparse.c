@@ -223,8 +223,10 @@ gst_base_video_parse_set_state (GstBaseVideoParse * parse, GstVideoState state)
       "pixel-aspect-ratio", GST_TYPE_FRACTION, state.par_n, state.par_d,
       "interlaced", G_TYPE_BOOLEAN, state.interlaced, NULL);
 
-  if (!gst_pad_set_caps (parse->srcpad, caps))
-    GST_WARNING ("Couldn't set caps: %" GST_PTR_FORMAT, caps);
+  if (!gst_caps_is_equal (caps, GST_PAD_CAPS (parse->srcpad))) {
+    if (!gst_pad_set_caps (parse->srcpad, caps))
+      GST_WARNING ("Couldn't set caps: %" GST_PTR_FORMAT, caps);
+  }
 
   gst_caps_unref (caps);
 }
