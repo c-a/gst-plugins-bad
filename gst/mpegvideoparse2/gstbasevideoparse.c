@@ -751,7 +751,7 @@ gst_base_video_parse_sink_event (GstPad * pad, GstEvent * event)
       if (parse->index)
         gst_index_commit (parse->index, parse->index_id);
 
-      res = gst_pad_push_event (parse->srcpad, event);
+      res = gst_pad_event_default (pad, event);
       break;
     }
     case GST_EVENT_NEWSEGMENT:
