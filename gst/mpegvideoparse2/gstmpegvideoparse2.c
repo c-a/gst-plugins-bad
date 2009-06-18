@@ -407,7 +407,7 @@ gst_mvp2_shape_output (GstBaseVideoParse * parse,
         gst_util_uint64_scale (GST_SECOND, mpegparse->byte_offset,
         GST_BUFFER_TIMESTAMP (buf));
 
-    if (mpegparse->final_duration == GST_CLOCK_TIME_NONE) {
+    if (!GST_CLOCK_TIME_IS_VALID (mpegparse->final_duration)) {
       GstFormat format;
       gint64 byte_duration;
 
