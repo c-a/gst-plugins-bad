@@ -237,6 +237,8 @@ gst_base_video_parse_set_duration (GstBaseVideoParse * parse,
 {
   g_return_if_fail (GST_IS_BASE_VIDEO_PARSE (parse));
 
+  GST_DEBUG ("set_duration");
+
   if (duration != parse->duration) {
     GstMessage *m;
 
@@ -565,7 +567,7 @@ gst_base_video_parse_src_query (GstPad * pad, GstQuery * query)
       gint64 value;
 
       /* see if upstream can handle it */
-      res = gst_pad_query (parse->sinkpad, query);
+      res = gst_pad_query_default (pad, query);
       if (res)
         goto done;
 
@@ -589,7 +591,7 @@ gst_base_video_parse_src_query (GstPad * pad, GstQuery * query)
       gint64 duration;
 
       /* see if upstream can handle it */
-      res = gst_pad_query (parse->sinkpad, query);
+      res = gst_pad_query_default (pad, query);
       if (res)
         goto done;
 
@@ -603,8 +605,10 @@ gst_base_video_parse_src_query (GstPad * pad, GstQuery * query)
         res = gst_base_video_parse_convert (pad,
             parse->duration_fmt, parse->duration, &format, &duration);
 
-      if (res)
+      if (res) {
+        GST_DEBUG ("Duration: %" GST_TIME_FORMAT, GST_TIME_ARGS (duration));
         gst_query_set_duration (query, format, duration);
+      }
 
       break;
     }
@@ -614,7 +618,7 @@ gst_base_video_parse_src_query (GstPad * pad, GstQuery * query)
       gint64 src_val, dest_val;
 
       /* see if upstream can handle it */
-      res = gst_pad_query (parse->sinkpad, query);
+      res = gst_pad_query_default (pad, query);
       if (res)
         goto done;
 
