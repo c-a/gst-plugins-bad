@@ -105,7 +105,7 @@ struct _GstBaseVideoParseFrame
   gboolean is_keyframe;
   gboolean is_discont;
 
-  GstBuffer *buffer;
+  GstBufferList *buffer_list;
 };
 
 typedef struct _GstBaseVideoParse GstBaseVideoParse;
@@ -122,7 +122,6 @@ struct _GstBaseVideoParse
   GSList *pending_segs;
   
   GstAdapter *input_adapter;
-  GstAdapter *output_adapter;
 
   GstVideoState state;
 
@@ -136,6 +135,9 @@ struct _GstBaseVideoParse
 
   GstBaseVideoParseFrame *current_frame;
   gint distance_from_sync;
+
+  GstBufferList *buffer_list;
+  GstBufferListIterator *buffer_list_iterator;
 
   guint64 presentation_timestamp;
   guint64 system_frame_number;
@@ -245,7 +247,7 @@ void           gst_base_video_parse_frame_set_keyframe  (GstBaseVideoParse *pars
 
 void           gst_base_video_parse_set_sync_point      (GstBaseVideoParse *parse);
 GstFlowReturn  gst_base_video_parse_push                (GstBaseVideoParse *parse,
-                                                         GstBuffer *buffer);
+                                                         GstBufferList *buffer_list);
 
 G_END_DECLS
 

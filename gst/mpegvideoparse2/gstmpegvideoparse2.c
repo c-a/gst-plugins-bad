@@ -391,7 +391,9 @@ gst_mvp2_shape_output (GstBaseVideoParse * parse,
     GstBaseVideoParseFrame * frame)
 {
   GstMpegVideoParse2 *mpegparse = GST_MPEG_VIDEO_PARSE2 (parse);
-  GstBuffer *buf = frame->buffer;
+  GstBuffer *buf;
+
+  buf = gst_buffer_list_get (frame->buffer_list, 0, 0);
 
   if (frame->is_eos && GST_BUFFER_TIMESTAMP_IS_VALID (buf)) {
     mpegparse->final_duration = GST_BUFFER_TIMESTAMP (buf);
@@ -424,7 +426,7 @@ gst_mvp2_shape_output (GstBaseVideoParse * parse,
     }
   }
 
-  return gst_base_video_parse_push (parse, buf);
+  return gst_base_video_parse_push (parse, frame->buffer_list);
 }
 
 static gboolean
