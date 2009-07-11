@@ -301,6 +301,10 @@ gst_base_video_parse_frame_finish (GstBaseVideoParse * parse)
 
     if (GST_CLOCK_TIME_IS_VALID (frame->upstream_timestamp))
       frame->presentation_timestamp = frame->upstream_timestamp;
+    else if (GST_CLOCK_TIME_IS_VALID (parse->seek_timestamp)) {
+      frame->presentation_timestamp = parse->seek_timestamp;
+      parse->seek_timestamp = GST_CLOCK_TIME_NONE;
+    }
 
     if (frame->is_sync_point) {
       parse->timestamp_offset =
@@ -312,7 +316,7 @@ gst_base_video_parse_frame_finish (GstBaseVideoParse * parse)
     }
 
     /* calculate timestamp from frame number if we've got one */
-    if (frame->presentation_timestamp == GST_CLOCK_TIME_NONE
+    if (!GST_CLOCK_TIME_IS_VALID (frame->presentation_timestamp)
         && frame->presentation_frame_number != -1) {
 
       frame->presentation_timestamp =
@@ -855,8 +859,11 @@ gst_base_video_parse_index_find_offset (GstBaseVideoParse * parse,
     }
   }
 
-  if (res)
+  if (res) {
     *offset = bytes;
+    parse->seek_timestamp = found_time;
+  }
+
 
   return res;
 }
@@ -989,6 +996,7 @@ gst_base_video_parse_start (GstBaseVideoParse * parse)
   parse->current_frame = gst_base_video_parse_new_frame (parse);
 
   parse->need_newsegment = FALSE;
+  parse->seek_timestamp = GST_CLOCK_TIME_NONE;
 
   if (klass->start)
     res = klass->start (parse);

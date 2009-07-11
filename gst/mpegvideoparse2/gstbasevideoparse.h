@@ -150,6 +150,7 @@ struct _GstBaseVideoParse
   GstFormat duration_fmt;
 
   gboolean need_newsegment;
+  GstClockTime seek_timestamp;
   GMutex *parse_lock;
 };
 
