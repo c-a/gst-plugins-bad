@@ -244,6 +244,50 @@ gst_mvp2_handle_picture (GstMpegVideoParse2 * mpegparse, GstBuffer * buffer)
   return TRUE;
 }
 
+static gboolean
+gst_mvp2_handle_picture_extension (GstMpegVideoParse2 * mpegparse,
+    GstBuffer * buffer)
+{
+  GstBaseVideoParse *parse = GST_BASE_VIDEO_PARSE (mpegparse);
+  MPEGPictureExt pic_ext;
+  gint fields;
+  GstVideoState state;
+  GstClockTime duration;
+
+  if (!mpeg_util_parse_picture_coding_extension (&pic_ext, buffer))
+    return FALSE;
+
+  state = gst_base_video_parse_get_state (parse);
+
+  /* calculate picture duration */
+  fields = 2;
+  if (pic_ext.picture_structure == 3) {
+    if (state.interlaced) {
+      if (pic_ext.progressive_frame == 0)
+        fields = 2;
+      if (pic_ext.progressive_frame == 0 && pic_ext.repeat_first_field == 0)
+        fields = 2;
+      if (pic_ext.progressive_frame == 1 && pic_ext.repeat_first_field == 1)
+        fields = 3;
+    } else {
+      if (pic_ext.repeat_first_field == 0)
+        fields = 2;
+      if (pic_ext.repeat_first_field == 1 && pic_ext.top_field_first == 0)
+        fields = 4;
+      if (pic_ext.repeat_first_field == 1 && pic_ext.top_field_first == 1)
+        fields = 6;
+    }
+  } else
+    fields = 1;
+  GST_DEBUG ("fields: %d", fields);
+
+  duration = gst_util_uint64_scale (fields, GST_SECOND * state.fps_d,
+      2 * state.fps_n);
+  gst_base_video_parse_frame_set_duration (parse, duration);
+
+  return TRUE;
+}
+
 static void
 gst_mvp2_set_state (GstMpegVideoParse2 * mpegparse)
 {
@@ -362,6 +406,13 @@ gst_mvp2_parse_data (GstBaseVideoParse * parse, GstBuffer * buffer)
           /* so that we don't finish the frame if we get a MPEG_PACKET_PICTURE
            * or MPEG_PACKET_GOP after this */
           start_code = MPEG_PACKET_SEQUENCE;
+          break;
+        }
+        case MPEG_PACKET_EXT_PICTURE_CODING:
+        {
+          GST_DEBUG_OBJECT (mpegparse, "MPEG_PACKET_PICTURE_CODING_EXTENSION");
+          if (!gst_mvp2_handle_picture_extension (mpegparse, buffer))
+            goto invalid_packet;
           break;
         }
         default:

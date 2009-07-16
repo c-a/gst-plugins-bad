@@ -244,6 +244,8 @@ void           gst_base_video_parse_frame_set_timestamp (GstBaseVideoParse *pars
                                                          GstClockTime timestamp);
 void           gst_base_video_parse_frame_set_frame_nr  (GstBaseVideoParse *parse,
                                                          guint64 frame_number);
+void           gst_base_video_parse_frame_set_duration  (GstBaseVideoParse *parse,
+                                                         GstClockTime duration);
 void           gst_base_video_parse_frame_set_keyframe  (GstBaseVideoParse *parse);
 
 void           gst_base_video_parse_set_sync_point      (GstBaseVideoParse *parse);

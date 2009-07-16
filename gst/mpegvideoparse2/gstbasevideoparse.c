@@ -410,6 +410,16 @@ gst_base_video_parse_frame_set_frame_nr (GstBaseVideoParse * parse,
 }
 
 void
+gst_base_video_parse_frame_set_duration (GstBaseVideoParse * parse,
+    GstClockTime duration)
+{
+  g_return_if_fail (GST_IS_BASE_VIDEO_PARSE (parse));
+  g_return_if_fail (GST_CLOCK_TIME_IS_VALID (duration));
+
+  parse->current_frame->presentation_duration = duration;
+}
+
+void
 gst_base_video_parse_frame_set_keyframe (GstBaseVideoParse * parse)
 {
   g_return_if_fail (GST_IS_BASE_VIDEO_PARSE (parse));
