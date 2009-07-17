@@ -1639,6 +1639,7 @@ gst/festival/Makefile
 gst/freeze/Makefile
 gst/frei0r/Makefile
 gst/h264parse/Makefile
+gst/h264parse2/Makefile
 gst/hdvparse/Makefile
 gst/id3tag/Makefile
 gst/invtelecine/Makefile
