@@ -23,7 +23,7 @@
 #endif
 
 #include <gst/base/gstadapter.h>
-#include <gst/base/gstbytereader.h>
+#include <gst/base/gstbitreader.h>
 #include <string.h>
 
 #include "gsth264parse2.h"
@@ -46,7 +46,58 @@ static GstStaticPadTemplate sink_factory = GST_STATIC_PAD_TEMPLATE ("sink",
 GST_BOILERPLATE (GstH264Parse2, gst_h264_parse2, GstBaseVideoParse,
     GST_TYPE_BASE_VIDEO_PARSE);
 
-#define MVP2_HEADER_SIZE 4
+#define SYNC_CODE_SIZE 3
+
+static gboolean
+gst_h264_parse2_setcaps (GstPad * pad, GstCaps * caps)
+{
+  GstH264Parse2 *h264parse;
+  GstStructure *structure;
+  const GValue *value;
+  gboolean res = TRUE;
+
+  h264parse = GST_H264_PARSE2 (gst_pad_get_parent (pad));
+
+  structure = gst_caps_get_structure (caps, 0);
+  /* packetized video has a codec_data */
+  if ((value = gst_structure_get_value (structure, "codec_data"))) {
+    GstBuffer *buf;
+    guint8 *data;
+    guint size;
+
+    GST_DEBUG_OBJECT (h264parse, "have packetized h264");
+    h264parse->packetized = TRUE;
+
+    buf = gst_value_get_buffer (value);
+    data = GST_BUFFER_DATA (buf);
+    size = GST_BUFFER_SIZE (buf);
+
+    /* parse the avcC data */
+    if (size < 7) {
+      GST_ERROR_OBJECT (h264parse, "avcC size %u < 7", size);
+      goto error;
+    }
+    /* parse the version, this must be 1 */
+    if (data[0] != 1) {
+      GST_ERROR_OBJECT (h264parse, "wrong avcC version");
+      goto error;
+    }
+
+    /* 6 bits reserved | 2 bits lengthSizeMinusOne */
+    /* this is the number of bytes in front of the NAL units to mark their
+     * length */
+    h264parse->nal_length_size = (data[4] & 0x03) + 1;
+    GST_DEBUG_OBJECT (h264parse, "nal length %u", h264parse->nal_length_size);
+  }
+
+done:
+  gst_object_unref (h264parse);
+  return res;
+
+error:
+  res = FALSE;
+  goto done;
+}
 
 static gboolean
 gst_h264_parse2_convert (GstBaseVideoParse * parse, GstFormat src_format,
@@ -84,69 +135,120 @@ gst_h264_parse2_get_base_caps (GstBaseVideoParse * parse)
 }
 
 static gint
-gst_h264_parse2_scan_for_sync (GstAdapter * adapter, gboolean at_eos,
-    gint offset, gint n)
+gst_h264_parse2_scan_for_sync (GstBaseVideoParse * parse, GstAdapter * adapter)
 {
+  GstH264Parse2 *h264parse = GST_H264_PARSE2 (parse);
   gint m;
 
-  if (n < 4) {
-    if (at_eos)
-      return n;
-    else
-      return 0;
-  }
+  if (h264parse->packetized)
+    return 0;
+
   m = gst_adapter_masked_scan_uint32 (adapter, 0xffffff00, 0x00000100,
-      offset, n);
+      0, gst_adapter_available (adapter));
   if (m == -1)
-    return n - (MVP2_HEADER_SIZE - 1);
+    return gst_adapter_available (adapter) - SYNC_CODE_SIZE;
 
   return m;
 }
 
-static GstFlowReturn
+static GstBaseVideoParseScanResult
 gst_h264_parse2_scan_for_packet_end (GstBaseVideoParse * parse,
-    GstAdapter * adapter, gint * size)
+    GstAdapter * adapter, guint * size)
 {
-  return GST_FLOW_OK;
-}
+  GstH264Parse2 *h264parse = GST_H264_PARSE2 (parse);
+  guint avail;
 
-static void
-gst_h264_parse2_set_state (GstH264Parse2 * h264parse)
-{
-  GstBaseVideoParse *parse = GST_BASE_VIDEO_PARSE (h264parse);
-  GstVideoState state;
+  avail = gst_adapter_available (adapter);
+  if (avail < h264parse->nal_length_size)
+    return GST_BASE_VIDEO_PARSE_SCAN_RESULT_NEED_DATA;
 
-  state = gst_base_video_parse_get_state (parse);
+  if (h264parse->packetized) {
+    guint8 *data;
+    gint i;
+    guint32 nal_length;
 
-  state.width = h264parse->width;
-  state.height = h264parse->height;
+    data = g_slice_alloc (h264parse->nal_length_size);
+    gst_adapter_copy (adapter, data, 0, h264parse->nal_length_size);
+    for (i = 0; i < h264parse->nal_length_size; i++)
+      nal_length = (nal_length << 8) | data[i];
 
-  state.fps_n = h264parse->fps_n;
-  state.fps_d = h264parse->fps_d;
+    g_slice_free1 (h264parse->nal_length_size, data);
 
-  state.par_n = h264parse->par_n;
-  state.par_d = h264parse->par_d;
+    nal_length += h264parse->nal_length_size;
 
-  gst_base_video_parse_set_state (parse, state);
-}
+    /* check for invalid NALU sizes, assume the size if the available bytes
+     * when something is fishy */
+    if (nal_length <= 1 || nal_length > avail) {
+      nal_length = avail - h264parse->nal_length_size;
+      GST_DEBUG_OBJECT (h264parse, "fixing invalid NALU size to %u",
+          nal_length);
+    }
 
-GstFlowReturn
-gst_h264_parse2_finish_frame (GstH264Parse2 * h264parse)
-{
-  GstBaseVideoParse *parse = (GST_BASE_VIDEO_PARSE (h264parse));
+    *size = nal_length;
+  }
 
-  if (h264parse->prev_packet != -1)
-    return gst_base_video_parse_frame_finish (parse);
+  else {
+    guint8 *data;
+    guint32 start_code;
+    guint n;
 
-  return GST_FLOW_OK;
+    data = g_slice_alloc (SYNC_CODE_SIZE);
+    gst_adapter_copy (adapter, data, 0, SYNC_CODE_SIZE);
+    start_code = ((data[0] << 16) && (data[1] << 8) && data[2]);
+    g_slice_free1 (SYNC_CODE_SIZE, data);
+
+    if (start_code != 0x000001)
+      return GST_BASE_VIDEO_PARSE_SCAN_RESULT_LOST_SYNC;
+
+    /* scan for 0x000001 or 0x000000 */
+    n = gst_adapter_masked_scan_uint32 (adapter, 0xfffffe00, 0x00000000,
+        SYNC_CODE_SIZE, avail - SYNC_CODE_SIZE);
+    if (n == -1)
+      return GST_BASE_VIDEO_PARSE_SCAN_RESULT_NEED_DATA;
+
+    *size = n;
+  }
+
+  return GST_BASE_VIDEO_PARSE_SCAN_RESULT_OK;
 }
 
 static GstFlowReturn
 gst_h264_parse2_parse_data (GstBaseVideoParse * parse, GstBuffer * buffer)
 {
   GstH264Parse2 *h264parse = GST_H264_PARSE2 (parse);
+  GstBitReader reader;
+  guint16 forbidden_zero_bit;
+  guint16 nal_ref_idc;
+  guint16 nal_unit_type;
+
+  gst_bit_reader_init_from_buffer (&reader, buffer);
+
+  /* skip nal_length or sync code */
+  gst_bit_reader_skip (&reader, h264parse->nal_length_size * 8);
+
+  if (!gst_bit_reader_get_bits_uint16 (&reader, &forbidden_zero_bit, 1))
+    goto invalid_packet;
+  if (forbidden_zero_bit != 0) {
+    GST_WARNING ("forbidden_zero_bit != 0");
+    return GST_FLOW_ERROR;
+  }
+
+  if (!gst_bit_reader_get_bits_uint16 (&reader, &nal_ref_idc, 2))
+    goto invalid_packet;
+  GST_DEBUG ("nal_ref_idc: %u", nal_ref_idc);
+
+  /* read nal_unit_type */
+  if (!gst_bit_reader_get_bits_uint16 (&reader, &nal_unit_type, 5))
+    goto invalid_packet;
+
+  GST_DEBUG ("nal_unit_type: %u", nal_unit_type);
 
   return GST_FLOW_OK;
+
+invalid_packet:
+  GST_WARNING ("Invalid packet size!");
+
+  return GST_FLOW_ERROR;
 }
 
 static GstFlowReturn
@@ -197,6 +299,9 @@ gst_h264_parse2_start (GstBaseVideoParse * parse)
 {
   GstH264Parse2 *h264parse = GST_H264_PARSE2 (parse);
 
+  h264parse->packetized = FALSE;
+  h264parse->nal_length_size = SYNC_CODE_SIZE;
+
   h264parse->seq_header_buffer = NULL;
 
   h264parse->byterate = -1;
@@ -221,7 +326,9 @@ gst_h264_parse2_stop (GstBaseVideoParse * parse)
 static void
 gst_h264_parse2_flush (GstBaseVideoParse * parse)
 {
+#if 0
   GstH264Parse2 *h264parse = GST_H264_PARSE2 (parse);
+#endif
 }
 
 static void
@@ -245,6 +352,10 @@ gst_h264_parse2_base_init (gpointer g_class)
 static void
 gst_h264_parse2_init (GstH264Parse2 * h264parse, GstH264Parse2Class * klass)
 {
+  GstPad *sink_pad;
+
+  sink_pad = GST_BASE_VIDEO_PARSE_SINK_PAD (h264parse);
+  gst_pad_set_setcaps_function (sink_pad, gst_h264_parse2_setcaps);
 }
 
 static void
