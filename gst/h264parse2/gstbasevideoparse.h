@@ -21,6 +21,8 @@
 #ifndef _GST_BASE_VIDEO_PARSE_H_
 #define _GST_BASE_VIDEO_PARSE_H_
 
+#define GST_USE_UNSTABLE_API
+
 #include <gst/video/gstbasevideoutils.h>
 
 G_BEGIN_DECLS
@@ -82,6 +84,15 @@ G_BEGIN_DECLS
  * Release the lock that protects the parse function from concurrent access.
  */
 #define GST_BASE_VIDEO_PARSE_UNLOCK(obj) g_mutex_unlock (((GstBaseVideoParse *) (obj))->parse_lock)
+
+typedef enum _GstBaseVideoParseScanResult GstBaseVideoParseScanResult;
+
+enum _GstBaseVideoParseScanResult
+{
+  GST_BASE_VIDEO_PARSE_SCAN_RESULT_OK,
+  GST_BASE_VIDEO_PARSE_SCAN_RESULT_LOST_SYNC,
+  GST_BASE_VIDEO_PARSE_SCAN_RESULT_NEED_DATA
+};
 
 typedef struct _GstBaseVideoParseFrame GstBaseVideoParseFrame;
 
@@ -197,12 +208,12 @@ struct _GstBaseVideoParseClass
 
   void          (*flush)               (GstBaseVideoParse *parse);
 
-  gint          (*scan_for_sync)       (GstAdapter *adapter, gboolean at_eos,
-                                        gint offset, gint n);
+  gint          (*scan_for_sync)       (GstBaseVideoParse *parse,
+                                        GstAdapter *adapter);
   
-  GstFlowReturn (*scan_for_packet_end) (GstBaseVideoParse *parse,
-                                        GstAdapter *adapter,
-                                        gint *size);
+  GstBaseVideoParseScanResult (*scan_for_packet_end) (GstBaseVideoParse *parse,
+                                                      GstAdapter *adapter,
+                                                      guint *size);
   
   GstFlowReturn (*parse_data)          (GstBaseVideoParse *parse,
                                         GstBuffer *buffer);

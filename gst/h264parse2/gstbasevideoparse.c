@@ -1042,18 +1042,20 @@ static GstFlowReturn
 gst_base_video_parse_drain (GstBaseVideoParse * parse, gboolean at_eos)
 {
   GstBaseVideoParseClass *klass;
+  GstBaseVideoParseScanResult res;
   GstFlowReturn ret;
-  gint next;
+  guint size;
 
   klass = GST_BASE_VIDEO_PARSE_GET_CLASS (parse);
 
+lost_sync:
   if (!parse->have_sync) {
     gint n, m;
 
     GST_DEBUG ("no sync, scanning");
 
     n = gst_adapter_available (parse->input_adapter);
-    m = klass->scan_for_sync (parse->input_adapter, at_eos, 0, n);
+    m = klass->scan_for_sync (parse, parse->input_adapter);
 
     gst_adapter_flush (parse->input_adapter, m);
 
@@ -1068,25 +1070,40 @@ gst_base_video_parse_drain (GstBaseVideoParse * parse, gboolean at_eos)
     }
   }
 
-  ret = klass->scan_for_packet_end (parse, parse->input_adapter, &next);
-  while (ret == GST_FLOW_OK) {
-    GstBuffer *buffer;
+  res = klass->scan_for_packet_end (parse, parse->input_adapter, &size);
+  while (res == GST_BASE_VIDEO_PARSE_SCAN_RESULT_OK) {
+    GstBuffer *buf;
+
+    GST_DEBUG ("Packet size: %u", size);
+    if (size > gst_adapter_available (parse->input_adapter))
+      return GST_FLOW_OK;
 
     parse->upstream_timestamp =
         GST_BUFFER_TIMESTAMP (parse->input_adapter->buflist->data);
     parse->byte_offset =
         GST_BUFFER_OFFSET (parse->input_adapter->buflist->data);
-    buffer = gst_adapter_take_buffer (parse->input_adapter, next);
-    ret = klass->parse_data (parse, buffer);
+    buf = gst_adapter_take_buffer (parse->input_adapter, size);
+    ret = klass->parse_data (parse, buf);
     if (ret != GST_FLOW_OK)
       break;
 
-    ret = klass->scan_for_packet_end (parse, parse->input_adapter, &next);
+    res = klass->scan_for_packet_end (parse, parse->input_adapter, &size);
   }
 
-  if (ret == GST_BASE_VIDEO_PARSE_FLOW_NEED_DATA) {
-    return GST_FLOW_OK;
+  if (res == GST_BASE_VIDEO_PARSE_SCAN_RESULT_LOST_SYNC) {
+    parse->have_sync = FALSE;
+    goto lost_sync;
+  } else if (res == GST_BASE_VIDEO_PARSE_SCAN_RESULT_NEED_DATA) {
+    if (at_eos) {
+      GstBuffer *buf;
+
+      buf = gst_adapter_take_buffer (parse->input_adapter,
+          gst_adapter_available (parse->input_adapter));
+      ret = klass->parse_data (parse, buf);
+    } else
+      return GST_FLOW_OK;
   }
+
   return ret;
 }
 
