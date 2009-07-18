@@ -44,8 +44,6 @@ struct _GstH264Parse2 {
   gboolean packetized;
   guint nal_length_size;
   
-  GstBuffer *seq_header_buffer;
-  
   guint64 byte_offset;
   guint64 byterate;
   GstClockTime final_duration;

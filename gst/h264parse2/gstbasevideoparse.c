@@ -61,6 +61,8 @@ static gboolean gst_base_video_parse_src_query (GstPad * pad, GstQuery * query);
 static gboolean gst_base_video_parse_src_event (GstPad * pad, GstEvent * event);
 static gboolean gst_base_video_parse_sink_event (GstPad * pad,
     GstEvent * event);
+static gboolean gst_base_video_parse_sink_setcaps (GstPad * pad,
+    GstCaps * caps);
 static GstFlowReturn gst_base_video_parse_chain (GstPad * pad, GstBuffer * buf);
 
 /* Utility */
@@ -87,6 +89,8 @@ gst_base_video_parse_get_timestamp (GstBaseVideoParse * parse,
 
 static void gst_base_video_parse_send_pending_segs (GstBaseVideoParse * parse);
 static void gst_base_video_parse_clear_pending_segs (GstBaseVideoParse * parse);
+static gboolean gst_base_video_parse_update_src_caps (GstBaseVideoParse *
+    parse);
 
 #define _do_init(bla) \
     GST_DEBUG_CATEGORY_INIT (gst_basevideoparse_debug, "basevideoparse", 0, \
@@ -125,7 +129,6 @@ gst_base_video_parse_finalize (GObject * object)
 {
   GstBaseVideoParse *parse;
 
-  g_return_if_fail (GST_IS_BASE_VIDEO_PARSE (object));
   parse = GST_BASE_VIDEO_PARSE (object);
 
   if (parse->input_adapter) {
@@ -168,6 +171,7 @@ gst_base_video_parse_init (GstBaseVideoParse * parse,
 
   gst_pad_set_chain_function (pad, gst_base_video_parse_chain);
   gst_pad_set_event_function (pad, gst_base_video_parse_sink_event);
+  gst_pad_set_setcaps_function (pad, gst_base_video_parse_sink_setcaps);
 
   /* SRC_PAD */
   pad = GST_BASE_VIDEO_PARSE_SRC_PAD (parse);
@@ -196,35 +200,12 @@ gst_base_video_parse_get_state (GstBaseVideoParse * parse)
 void
 gst_base_video_parse_set_state (GstBaseVideoParse * parse, GstVideoState state)
 {
-  GstBaseVideoParseClass *klass;
-  GstCaps *caps;
-
   g_return_if_fail (GST_IS_BASE_VIDEO_PARSE (parse));
-
-  klass = GST_BASE_VIDEO_PARSE_GET_CLASS (parse);
 
   GST_DEBUG ("set_state");
   parse->state = state;
 
-  caps = klass->get_base_caps (parse);
-  if (!caps) {
-    GST_WARNING ("Subclass returned null caps");
-    return;
-  }
-
-  gst_caps_set_simple (caps,
-      "width", G_TYPE_INT, state.width,
-      "height", G_TYPE_INT, state.height,
-      "framerate", GST_TYPE_FRACTION, state.fps_n, state.fps_d,
-      "pixel-aspect-ratio", GST_TYPE_FRACTION, state.par_n, state.par_d,
-      "interlaced", G_TYPE_BOOLEAN, state.interlaced, NULL);
-
-  if (!gst_caps_is_equal (caps, GST_PAD_CAPS (parse->srcpad))) {
-    if (!gst_pad_set_caps (parse->srcpad, caps))
-      GST_WARNING ("Couldn't set caps: %" GST_PTR_FORMAT, caps);
-  }
-
-  gst_caps_unref (caps);
+  gst_base_video_parse_update_src_caps (parse);
 }
 
 void
@@ -834,6 +815,37 @@ newseg_wrong_rate:
   goto done;
 }
 
+static gboolean
+gst_base_video_parse_sink_setcaps (GstPad * pad, GstCaps * caps)
+{
+  GstBaseVideoParse *parse = GST_BASE_VIDEO_PARSE (gst_pad_get_parent (pad));
+  GstBaseVideoParseClass *klass = GST_BASE_VIDEO_PARSE_GET_CLASS (parse);
+  GstStructure *structure;
+  GstVideoState *state;
+  gboolean res = TRUE;
+
+  /* extract stream info */
+  structure = gst_caps_get_structure (caps, 0);
+  state = &parse->state;
+
+  gst_structure_get_int (structure, "width", &state->width);
+  gst_structure_get_int (structure, "height", &state->height);
+  gst_structure_get_fraction (structure, "framerate", &state->fps_n,
+      &state->fps_d);
+  gst_structure_get_fraction (structure, "pixel-aspect-ratio", &state->par_n,
+      &state->par_d);
+  gst_structure_get_boolean (structure, "interlaced", &state->interlaced);
+
+  if (klass->set_sink_caps)
+    res = klass->set_sink_caps (parse, caps);
+
+  res = (res && gst_pad_set_caps (pad, caps) &&
+      gst_base_video_parse_update_src_caps (parse));
+
+  gst_object_unref (parse);
+  return res;
+}
+
 /*
  * Utility functions
  */
@@ -1207,4 +1219,44 @@ gst_base_video_parse_clear_pending_segs (GstBaseVideoParse * parse)
     parse->pending_segs =
         g_slist_delete_link (parse->pending_segs, parse->pending_segs);
   }
+}
+
+static gboolean
+gst_base_video_parse_update_src_caps (GstBaseVideoParse * parse)
+{
+  GstBaseVideoParseClass *klass;
+  GstCaps *caps = NULL;
+  GstVideoState state;
+
+  klass = GST_BASE_VIDEO_PARSE_GET_CLASS (parse);
+
+  if (klass->get_base_caps) {
+    caps = klass->get_base_caps (parse);
+    if (!caps) {
+      GST_WARNING ("Subclass returned null caps");
+    }
+  }
+
+  if (GST_PAD_CAPS (parse->sinkpad) && (!caps))
+    caps = gst_caps_copy (GST_PAD_CAPS (parse->sinkpad));
+
+  if (!caps)
+    return FALSE;
+
+  state = parse->state;
+  gst_caps_set_simple (caps,
+      "parsed", G_TYPE_BOOLEAN, TRUE,
+      "width", G_TYPE_INT, state.width,
+      "height", G_TYPE_INT, state.height,
+      "framerate", GST_TYPE_FRACTION, state.fps_n, state.fps_d,
+      "pixel-aspect-ratio", GST_TYPE_FRACTION, state.par_n, state.par_d,
+      "interlaced", G_TYPE_BOOLEAN, state.interlaced, NULL);
+
+  if (!gst_caps_is_equal (caps, GST_PAD_CAPS (parse->srcpad))) {
+    if (!gst_pad_set_caps (parse->srcpad, caps))
+      GST_WARNING ("Couldn't set caps: %" GST_PTR_FORMAT, caps);
+  }
+
+  gst_caps_unref (caps);
+  return TRUE;
 }

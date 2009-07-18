@@ -185,6 +185,7 @@ struct _GstBaseVideoParse
  * @shape_output:        Optional.
  *                       Determine what should be done with the current packet,
  *                       e.g. push it, drop it, cache for reverse playback etc.
+ * @set_sink_caps        allows the subclass to be notified of the actual caps set.
  * @get_base_caps        Should return the base caps that should be set on the src pad
  * @convert:             Optional.
  *                       Convert between formats.
@@ -220,7 +221,9 @@ struct _GstBaseVideoParseClass
 
   GstFlowReturn (*shape_output)        (GstBaseVideoParse *parse,
                                         GstBaseVideoParseFrame *frame);
-  
+
+  gboolean      (*set_sink_caps)       (GstBaseVideoParse *parse,
+                                        GstCaps *caps);
   GstCaps      *(*get_base_caps)       (GstBaseVideoParse *parse);
 
   gboolean      (*convert)             (GstBaseVideoParse *parse,

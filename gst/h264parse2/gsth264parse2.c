@@ -49,14 +49,13 @@ GST_BOILERPLATE (GstH264Parse2, gst_h264_parse2, GstBaseVideoParse,
 #define SYNC_CODE_SIZE 3
 
 static gboolean
-gst_h264_parse2_setcaps (GstPad * pad, GstCaps * caps)
+gst_h264_parse2_set_sink_caps (GstBaseVideoParse * parse, GstCaps * caps)
 {
   GstH264Parse2 *h264parse;
   GstStructure *structure;
   const GValue *value;
-  gboolean res = TRUE;
 
-  h264parse = GST_H264_PARSE2 (gst_pad_get_parent (pad));
+  h264parse = GST_H264_PARSE2 (parse);
 
   structure = gst_caps_get_structure (caps, 0);
   /* packetized video has a codec_data */
@@ -75,12 +74,12 @@ gst_h264_parse2_setcaps (GstPad * pad, GstCaps * caps)
     /* parse the avcC data */
     if (size < 7) {
       GST_ERROR_OBJECT (h264parse, "avcC size %u < 7", size);
-      goto error;
+      return FALSE;
     }
     /* parse the version, this must be 1 */
     if (data[0] != 1) {
       GST_ERROR_OBJECT (h264parse, "wrong avcC version");
-      goto error;
+      return FALSE;
     }
 
     /* 6 bits reserved | 2 bits lengthSizeMinusOne */
@@ -90,13 +89,7 @@ gst_h264_parse2_setcaps (GstPad * pad, GstCaps * caps)
     GST_DEBUG_OBJECT (h264parse, "nal length %u", h264parse->nal_length_size);
   }
 
-done:
-  gst_object_unref (h264parse);
-  return res;
-
-error:
-  res = FALSE;
-  goto done;
+  return TRUE;
 }
 
 static gboolean
@@ -119,19 +112,6 @@ gst_h264_parse2_convert (GstBaseVideoParse * parse, GstFormat src_format,
   }
 
   return FALSE;
-}
-
-static GstCaps *
-gst_h264_parse2_get_base_caps (GstBaseVideoParse * parse)
-{
-  GstH264Parse2 *h264parse = GST_H264_PARSE2 (parse);
-  GstCaps *caps;
-
-  caps = gst_caps_new_simple ("video/x-h264",
-      "parsed", G_TYPE_BOOLEAN, TRUE,
-      "codec_data", GST_TYPE_BUFFER, h264parse->seq_header_buffer, NULL);
-
-  return caps;
 }
 
 static gint
@@ -302,8 +282,6 @@ gst_h264_parse2_start (GstBaseVideoParse * parse)
   h264parse->packetized = FALSE;
   h264parse->nal_length_size = SYNC_CODE_SIZE;
 
-  h264parse->seq_header_buffer = NULL;
-
   h264parse->byterate = -1;
   h264parse->byte_offset = 0;
 
@@ -315,11 +293,6 @@ gst_h264_parse2_start (GstBaseVideoParse * parse)
 static gboolean
 gst_h264_parse2_stop (GstBaseVideoParse * parse)
 {
-  GstH264Parse2 *h264parse = GST_H264_PARSE2 (parse);
-
-  if (h264parse->seq_header_buffer)
-    gst_buffer_unref (h264parse->seq_header_buffer);
-
   return TRUE;
 }
 
@@ -352,10 +325,6 @@ gst_h264_parse2_base_init (gpointer g_class)
 static void
 gst_h264_parse2_init (GstH264Parse2 * h264parse, GstH264Parse2Class * klass)
 {
-  GstPad *sink_pad;
-
-  sink_pad = GST_BASE_VIDEO_PARSE_SINK_PAD (h264parse);
-  gst_pad_set_setcaps_function (sink_pad, gst_h264_parse2_setcaps);
 }
 
 static void
@@ -385,8 +354,8 @@ gst_h264_parse2_class_init (GstH264Parse2Class * klass)
   baseparse_class->shape_output =
       GST_DEBUG_FUNCPTR (gst_h264_parse2_shape_output);
 
-  baseparse_class->get_base_caps =
-      GST_DEBUG_FUNCPTR (gst_h264_parse2_get_base_caps);
+  baseparse_class->set_sink_caps =
+      GST_DEBUG_FUNCPTR (gst_h264_parse2_set_sink_caps);
 
   baseparse_class->convert = GST_DEBUG_FUNCPTR (gst_h264_parse2_convert);
 }
