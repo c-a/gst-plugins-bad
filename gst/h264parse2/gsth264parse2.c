@@ -43,8 +43,12 @@ static GstStaticPadTemplate sink_factory = GST_STATIC_PAD_TEMPLATE ("sink",
     GST_STATIC_CAPS ("video/x-h264, " "parsed = (boolean) false")
     );
 
-GST_BOILERPLATE (GstH264Parse2, gst_h264_parse2, GstBaseVideoParse,
-    GST_TYPE_BASE_VIDEO_PARSE);
+#define _do_init(bla) \
+    GST_DEBUG_CATEGORY_INIT (h264parse_debug, "h264parse", 0, \
+    "H264 parser");
+
+GST_BOILERPLATE_FULL (GstH264Parse2, gst_h264_parse2, GstBaseVideoParse,
+    GST_TYPE_BASE_VIDEO_PARSE, _do_init);
 
 #define SYNC_CODE_SIZE 3
 
@@ -317,9 +321,6 @@ gst_h264_parse2_base_init (gpointer g_class)
   gst_element_class_set_details_simple (element_class, "H264 parser",
       "Codec/Parser/Video",
       "Parses H264", "Carl-Anton Ingmarsson <ca.ingmarsson@gmail.com>");
-
-  GST_DEBUG_CATEGORY_INIT (h264parse_debug, "h264parse2", 0,
-      "H264 parser element");
 }
 
 static void
