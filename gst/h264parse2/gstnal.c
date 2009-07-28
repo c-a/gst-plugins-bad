@@ -301,14 +301,8 @@ gst_nal_reader_read (GstNalReader * reader, guint nbits)
 
     check_three_byte = TRUE;
   next_byte:
-    if (reader->byte >= reader->size)
+    if (reader->byte > reader->size)
       return FALSE;
-
-    if ((reader->size - reader->byte) >= 3)
-      if (reader->data[reader->byte] == 0x00 &&
-          reader->data[reader->byte + 1] == 0x00 &&
-          reader->data[reader->byte + 2] == 0x00)
-        return FALSE;
 
     byte = reader->data[reader->byte++];
 
