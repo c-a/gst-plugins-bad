@@ -18,29 +18,12 @@
  * Boston, MA 02111-1307, USA.
  */
 
-#ifndef __GST_NAL_H__
-#define __GST_NAL_H__
+#ifndef __GST_NAL_READER_H__
+#define __GST_NAL_READER_H__
 
 #include <gst/gst.h>
 
 G_BEGIN_DECLS
-
-typedef enum
-{
-  NAL_UNKNOWN = 0,
-  NAL_SLICE = 1,
-  NAL_SLICE_DPA = 2,
-  NAL_SLICE_DPB = 3,
-  NAL_SLICE_DPC = 4,
-  NAL_SLICE_IDR = 5,
-  NAL_SEI = 6,
-  NAL_SPS = 7,
-  NAL_PPS = 8,
-  NAL_AU_DELIMITER = 9,
-  NAL_SEQ_END = 10,
-  NAL_STREAM_END = 11,
-  NAL_FILTER_DATA = 12
-} GstNalUnitType;
 
 typedef struct _GstNalReader GstNalReader;
 
@@ -110,4 +93,4 @@ gboolean gst_nal_reader_peek_se (const GstNalReader *reader, gint32 *val);
 
 G_END_DECLS
 
-#endif /* __GST_NAL_H__ */
+#endif /* __GST_NAL_READER_H__ */

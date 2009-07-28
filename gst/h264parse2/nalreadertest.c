@@ -25,7 +25,7 @@
 #include <gst/gst.h>
 #include <gst/check/gstcheck.h>
 
-#include "gstnal.h"
+#include "gstnalreader.h"
 
 #ifndef fail_unless_equals_int64
 #define fail_unless_equals_int64(a, b)					\

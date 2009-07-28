@@ -18,7 +18,7 @@
  * Boston, MA 02111-1307, USA.
  */
 
-#include "gstnal.h"
+#include "gstnalreader.h"
 
 static gboolean gst_nal_reader_read (GstNalReader * reader, guint nbits);
 

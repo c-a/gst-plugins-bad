@@ -26,6 +26,8 @@
 #include <gst/base/gstbitreader.h>
 #include <string.h>
 
+#include "gstnalutils.h"
+
 #include "gsth264parse2.h"
 
 GST_DEBUG_CATEGORY_STATIC (h264parse_debug);
@@ -204,6 +206,10 @@ gst_h264_parse2_parse_data (GstBaseVideoParse * parse, GstBuffer * buffer)
   guint16 nal_ref_idc;
   guint16 nal_unit_type;
 
+  guint8 *data;
+  guint size;
+  gint i;
+
   gst_bit_reader_init_from_buffer (&reader, buffer);
 
   /* skip nal_length or sync code */
@@ -225,6 +231,25 @@ gst_h264_parse2_parse_data (GstBaseVideoParse * parse, GstBuffer * buffer)
     goto invalid_packet;
 
   GST_DEBUG ("nal_unit_type: %u", nal_unit_type);
+  if (nal_unit_type == 14 || nal_unit_type == 20) {
+    if (!gst_bit_reader_skip (&reader, 24))
+      goto invalid_packet;
+  }
+
+  data = GST_BUFFER_DATA (buffer) + gst_bit_reader_get_pos (&reader) / 8;
+  size = gst_bit_reader_get_remaining (&reader) * 8;
+
+  i = size - 1;
+  while (size >= 0 && data[i] == 0x00) {
+    g_debug ("skipping");
+    size--;
+  }
+
+  if (nal_unit_type >= NAL_SLICE && nal_unit_type <= NAL_SLICE_IDR) {
+    //gst_h264_parse2_handle_slice (h264parse, data, size);
+  }
+
+  gst_base_video_parse_frame_add (parse, buffer);
 
   return GST_FLOW_OK;
 
