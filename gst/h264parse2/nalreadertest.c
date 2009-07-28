@@ -233,6 +233,22 @@ GST_START_TEST (test_golomb)
 
 GST_END_TEST;
 
+GST_START_TEST (test_trailing_zero_8bits)
+{
+  guint8 data[] = { 0x01, 0x02, 0x00, 0x00, 0x00 };
+
+  GstNalReader reader = GST_NAL_READER_INIT (data, 5);
+  guint32 val;
+
+  GET_CHECK (&reader, val, 32, 16, 0x0102);
+  GET_CHECK_FAIL (&reader, val, 32, 24);
+
+  gst_nal_reader_init (&reader, data, 5);
+  GET_CHECK_FAIL (&reader, val, 32, 17);
+}
+
+GST_END_TEST;
+
 #undef GET_CHECK
 #undef PEEK_CHECK
 #undef GET_CHECK_FAIL
@@ -251,6 +267,7 @@ gst_nal_reader_suite (void)
   tcase_add_test (tc_chain, test_get_bits);
   tcase_add_test (tc_chain, test_emulation_prevention_skipping);
   tcase_add_test (tc_chain, test_golomb);
+  tcase_add_test (tc_chain, test_trailing_zero_8bits);
 
   return s;
 }
