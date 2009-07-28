@@ -200,21 +200,28 @@ GST_START_TEST (test_emulation_prevention_skipping)
   guint8 byte;
   guint32 word;
 
+  /* read one byte at a time */
   GET_CHECK (&reader, byte, 8, 8, 0x00);
   GET_CHECK (&reader, byte, 8, 8, 0x00);
   GET_CHECK (&reader, byte, 8, 8, 0xff);
   GET_CHECK_FAIL (&reader, byte, 8, 8);
 
+  /* test reading the whole at once */
+  gst_nal_reader_init (&reader, data, 4);
+  GET_CHECK (&reader, word, 32, 24, 0x0000ff);
+
+  /* test reading more than what's really there */
+  gst_nal_reader_init (&reader, data, 4);
+  GET_CHECK_FAIL (&reader, word, 32, 32);
+
+  /* test skipping */
   gst_nal_reader_init (&reader, data, 4);
   fail_unless (gst_nal_reader_skip (&reader, 16));
   GET_CHECK (&reader, byte, 8, 8, 0xff);
 
   gst_nal_reader_init (&reader, data, 4);
   fail_unless (gst_nal_reader_skip (&reader, 24));
-  GET_CHECK_FAIL (&reader, byte, 8, 8);
-
-  gst_nal_reader_init (&reader, data, 4);
-  GET_CHECK (&reader, word, 32, 23, 0x0000ff >> 1);
+  GET_CHECK_FAIL (&reader, byte, 8, 1);
 }
 
 GST_END_TEST;
