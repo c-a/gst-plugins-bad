@@ -184,8 +184,7 @@ gst_h264_parse2_scan_for_packet_end (GstBaseVideoParse * parse,
     if (start_code != 0x000001)
       return GST_BASE_VIDEO_PARSE_SCAN_RESULT_LOST_SYNC;
 
-    /* scan for 0x000001 or 0x000000 */
-    n = gst_adapter_masked_scan_uint32 (adapter, 0xfffffe00, 0x00000000,
+    n = gst_adapter_masked_scan_uint32 (adapter, 0xffffff00, 0x00000100,
         SYNC_CODE_SIZE, avail - SYNC_CODE_SIZE);
     if (n == -1)
       return GST_BASE_VIDEO_PARSE_SCAN_RESULT_NEED_DATA;
