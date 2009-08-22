@@ -26,7 +26,7 @@
 #include <gst/base/gstbitreader.h>
 #include <string.h>
 
-#include "gstnalutils.h"
+#include "gsth264parser.h"
 
 #include "gsth264parse2.h"
 
@@ -245,7 +245,7 @@ gst_h264_parse2_parse_data (GstBaseVideoParse * parse, GstBuffer * buffer)
     size--;
   }
 
-  if (nal_unit_type >= NAL_SLICE && nal_unit_type <= NAL_SLICE_IDR) {
+  if (nal_unit_type >= GST_NAL_SLICE && nal_unit_type <= GST_NAL_SLICE_IDR) {
     //gst_h264_parse2_handle_slice (h264parse, data, size);
   }
 

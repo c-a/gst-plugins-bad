@@ -5,7 +5,7 @@ lib_LTLIBRARIES = libgsth264parse2.la libgstnalreader-@GST_MAJORMINOR@.la
 libgsth264parse2_la_SOURCES = \
 	gsth264parse2.c \
 	gstbasevideoparse.c \
-	gstnalutils.c
+	gsth264parser.c
 
 libgsth264parse2_la_CFLAGS = $(GST_CFLAGS) $(GST_BASE_CFLAGS)
 libgsth264parse2_la_LIBADD = $(GST_LIBS) $(GST_BASE_LIBS)
@@ -31,4 +31,4 @@ nalreadertest_LDADD = $(GST_LIBS) $(GST_CHECK_LIBS) $(CHECK_LIBS) \
 noinst_HEADERS = \
 	gsth264parse2.h \
 	gstbasevideoparse.h \
-  gstnalutils.h
+  gsth264parser.h
