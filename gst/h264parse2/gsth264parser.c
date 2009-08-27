@@ -210,6 +210,10 @@ gst_h264_parser_parse_sequence (GstH264Parser * parser, guint8 * data,
   GstNalReader reader = GST_NAL_READER_INIT (data, size);
   GstH264Sequence *seq;
 
+  g_return_val_if_fail (GST_H264_IS_PARSER (parser), NULL);
+  g_return_val_if_fail (data != NULL, NULL);
+  g_return_val_if_fail (size > 0, NULL);
+
   seq = g_slice_new (GstH264Sequence);
 
   /* set default values for fields that might not be present in the bitstream
@@ -254,9 +258,9 @@ gst_h264_parser_parse_sequence (GstH264Parser * parser, guint8 * data,
 
   READ_UE (&reader, seq->log2_max_frame_num_minus4);
   READ_UE (&reader, seq->pic_order_cnt_type);
-  if (seq->pic_order_cnt_type == 0)
+  if (seq->pic_order_cnt_type == 0) {
     READ_UE (&reader, seq->log2_max_pic_order_cnt_lsb_minus4);
-  else if (seq->pic_order_cnt_type == 1) {
+  } else if (seq->pic_order_cnt_type == 1) {
     guint i;
 
     READ_UINT8 (&reader, seq->delta_pic_order_always_zero_flag, 1);
@@ -289,6 +293,10 @@ gst_h264_parser_parse_picture (GstH264Parser * parser, guint8 * data,
   guint32 seq_parameter_set_id;
   GstH264Sequence *seq;
 
+  g_return_val_if_fail (GST_H264_IS_PARSER (parser), NULL);
+  g_return_val_if_fail (data != NULL, NULL);
+  g_return_val_if_fail (size > 0, NULL);
+
   pic = g_slice_new (GstH264Picture);
 
   READ_UE (&reader, pic->id);
@@ -313,18 +321,24 @@ error:
 
 gboolean
 gst_h264_parser_parse_slice_header (GstH264Parser * parser,
-    GstNalSliceHeader * slice, guint8 * data, guint size)
+    GstH264Slice * slice, guint8 * data, guint size, guint32 nal_unit_type)
 {
   GstNalReader reader = GST_NAL_READER_INIT (data, size);
   guint32 pic_parameter_set_id;
-  GstNalPicture *pic;
+  GstH264Picture *pic;
   GstH264Sequence *seq;
+
+  g_return_val_if_fail (GST_H264_IS_PARSER (parser), FALSE);
+  g_return_val_if_fail (slice != NULL, FALSE);
+  g_return_val_if_fail (data != NULL, FALSE);
+  g_return_val_if_fail (size > 0, FALSE);
 
   READ_UE (&reader, slice->first_mb_in_slice);
   READ_UE (&reader, slice->slice_type);
 
   READ_UE (&reader, pic_parameter_set_id);
-  pic = g_hash_table_lookup (parser->pictures, pic_parameter_set_id);
+  pic = g_hash_table_lookup (parser->pictures,
+      GINT_TO_POINTER (pic_parameter_set_id));
   if (!pic)
     goto error;
   slice->picture = pic;
@@ -341,8 +355,8 @@ gst_h264_parser_parse_slice_header (GstH264Parser * parser,
   slice->num_ref_idx_l0_active_minus1 = pic->num_ref_idx_l0_active_minus1;
   slice->num_ref_idx_l1_active_minus1 = pic->num_ref_idx_l1_active_minus1;
 
-  if (seq->separate_color_plane_flag)
-    READ_UINT8 (&reader, slice->color_plane_id, 2);
+  if (seq->separate_colour_plane_flag)
+    READ_UINT8 (&reader, slice->colour_plane_id, 2);
 
   READ_UINT16 (&reader, slice->frame_num, seq->log2_max_frame_num_minus4 + 4);
 
@@ -371,18 +385,19 @@ gst_h264_parser_parse_slice_header (GstH264Parser * parser,
   if (pic->redundant_pic_cnt_present_flag)
     READ_UE (&reader, slice->redundant_pic_cnt);
 
-  if (slice->slice_type == B_SLICE)
+  if (slice->slice_type == GST_H264_B_SLICE)
     READ_UINT8 (&reader, slice->direct_spatial_mv_pred_flag, 1);
 
-  if (slice->slice_type == P_SLICE || slice->slice_type == SP_SLICE ||
-      slice->slice_type == B_SLICE) {
+  if (slice->slice_type == GST_H264_P_SLICE ||
+      slice->slice_type == GST_H264_SP_SLICE ||
+      slice->slice_type == GST_H264_B_SLICE) {
     guint8 num_ref_idx_active_override_flag;
 
     READ_UINT8 (&reader, num_ref_idx_active_override_flag, 1);
     if (num_ref_idx_active_override_flag) {
       READ_UE (&reader, slice->num_ref_idx_l0_active_minus1);
 
-      if (slice->slice_type == B_SLICE)
+      if (slice->slice_type == GST_H264_B_SLICE)
         READ_UE (&reader, slice->num_ref_idx_l1_active_minus1);
     }
   }
@@ -403,7 +418,7 @@ error:
 static void
 gst_h264_sequence_free (void *data)
 {
-  g_slice_free (GstH264Sequene, data);
+  g_slice_free (GstH264Sequence, data);
 }
 
 static void
@@ -426,6 +441,8 @@ gst_h264_parser_init (GstH264Parser * object)
 static void
 gst_h264_parser_finalize (GObject * object)
 {
+  GstH264Parser *parser = GST_H264_PARSER (object);
+
   g_hash_table_destroy (parser->sequences);
   g_hash_table_destroy (parser->pictures);
 
@@ -436,7 +453,6 @@ static void
 gst_h264_parser_class_init (GstH264ParserClass * klass)
 {
   GObjectClass *object_class = G_OBJECT_CLASS (klass);
-  GObjectClass *parent_class = G_OBJECT_CLASS (klass);
 
   object_class->finalize = gst_h264_parser_finalize;
 }

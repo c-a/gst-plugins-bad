@@ -121,6 +121,7 @@ struct _GstH264Slice
   
   GstH264Picture *picture;
 
+  /* if seq->separate_colour_plane_flag */
   guint8 colour_plane_id;
 
   guint16 frame_num;
@@ -134,13 +135,16 @@ struct _GstH264Slice
   /* if seq->pic_order_cnt_type == 0 */
   guint16 pic_order_cnt_lsb;
   /* and if (pic->pic_order_present_flag && !slice->field_pic_flag) */
-  guint32 delta_pic_order_cnt_bottom;
+  gint32 delta_pic_order_cnt_bottom;
 
-  guint32 delta_pic_order_cnt[2];
+  gint32 delta_pic_order_cnt[2];
   guint32 redundant_pic_cnt;
 
   /* if slice_type == B_SLICE */
   guint8 direct_spatial_mv_pred_flag;
+
+  guint32 num_ref_idx_l0_active_minus1;
+  guint32 num_ref_idx_l1_active_minus1;
 };
 
 #define GST_TYPE_H264_PARSER             (gst_h264_parser_get_type ())
