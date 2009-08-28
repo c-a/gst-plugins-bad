@@ -180,6 +180,13 @@ gst_nal_reader_skip_to_byte (GstNalReader * reader)
 {
   g_return_val_if_fail (reader != NULL, FALSE);
 
+  if (reader->bits_in_cache == 0) {
+    if ((reader->size - reader->byte) > 0)
+      reader->byte++;
+    else
+      return FALSE;
+  }
+
   reader->bits_in_cache = 0;
 
   return TRUE;
