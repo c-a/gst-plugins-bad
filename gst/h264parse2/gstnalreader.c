@@ -96,12 +96,12 @@ gst_nal_reader_free (GstNalReader * reader)
 }
 
 /**
- * gst_bit_reader_init:
- * @reader: a #GstBitReader instance
- * @data: Data from which the #GstBitReader should read
+ * gst_nal_reader_init:
+ * @reader: a #GstNalReader instance
+ * @data: Data from which the #GstNalReader should read
  * @size: Size of @data in bytes
  *
- * Initializes a #GstBitReader instance to read from @data. This function
+ * Initializes a #GstNalReader instance to read from @data. This function
  * can be called on already initialized instances.
  * 
  * Since: 0.10.22
@@ -122,11 +122,11 @@ gst_nal_reader_init (GstNalReader * reader, const guint8 * data, guint size)
 }
 
 /**
- * gst_bit_reader_init_from_buffer:
- * @reader: a #GstBitReader instance
- * @buffer: Buffer from which the #GstBitReader should read
+ * gst_nal_reader_init_from_buffer:
+ * @reader: a #GstNalReader instance
+ * @buffer: Buffer from which the #GstNalReader should read
  *
- * Initializes a #GstBitReader instance to read from @buffer. This function
+ * Initializes a #GstNalReader instance to read from @buffer. This function
  * can be called on already initialized instances.
  * 
  * Since: 0.10.22
@@ -142,11 +142,11 @@ gst_nal_reader_init_from_buffer (GstNalReader * reader,
 }
 
 /**
- * gst_bit_reader_skip:
- * @reader: a #GstBitReader instance
+ * gst_nal_reader_skip:
+ * @reader: a #GstNalReader instance
  * @nbits: the number of bits to skip
  *
- * Skips @nbits bits of the #GstBitReader instance.
+ * Skips @nbits bits of the #GstNalReader instance.
  *
  * Returns: %TRUE if @nbits bits could be skipped, %FALSE otherwise.
  * 
@@ -166,8 +166,8 @@ gst_nal_reader_skip (GstNalReader * reader, guint nbits)
 }
 
 /**
- * gst_bit_reader_skip_to_byte:
- * @reader: a #GstBitReader instance
+ * gst_nal_reader_skip_to_byte:
+ * @reader: a #GstNalReader instance
  *
  * Skips until the next byte.
  *
