@@ -186,6 +186,21 @@ gst_nal_reader_skip_to_byte (GstNalReader * reader)
 }
 
 /**
+ * gst_nal_reader_get_remaining:
+ * @reader: a #GstNalReader instance
+ *
+ * Returns the remaining number of bits of a GstNalReader instance.
+ *
+ * Returns: The remaining number of bits.
+ *
+ */
+guint
+gst_nal_reader_get_remaining (const GstNalReader * reader)
+{
+  return (reader->size - reader->byte) * 8 + reader->bits_in_cache;
+}
+
+/**
  * gst_nal_reader_get_bits_uint8:
  * @reader: a #GstNalReader instance
  * @val: Pointer to a #guint8 to store the result

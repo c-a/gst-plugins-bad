@@ -88,6 +88,25 @@ GST_START_TEST (test_initialization)
 
 GST_END_TEST;
 
+GST_START_TEST (test_get_remaining)
+{
+  guint8 data[] = { 0x00, 0x01 };
+  GstNalReader reader = GST_NAL_READER_INIT (data, 2);
+
+  fail_unless_equals_int (gst_nal_reader_get_remaining (&reader), 16);
+  fail_unless (gst_nal_reader_skip (&reader, 2));
+  fail_unless_equals_int (gst_nal_reader_get_remaining (&reader), 14);
+  fail_unless (gst_nal_reader_skip (&reader, 6));
+  fail_unless_equals_int (gst_nal_reader_get_remaining (&reader), 8);
+  fail_unless (gst_nal_reader_skip (&reader, 8));
+  fail_unless_equals_int (gst_nal_reader_get_remaining (&reader), 0);
+
+  fail_if (gst_nal_reader_skip (&reader, 2));
+  fail_unless_equals_int (gst_nal_reader_get_remaining (&reader), 0);
+}
+
+GST_END_TEST;
+
 #define GET_CHECK(reader, dest, bits, nbits, val) { \
   fail_unless (gst_nal_reader_get_bits_uint##bits (reader, &dest, nbits)); \
   fail_unless_equals_uint64 (dest, val); \
@@ -255,6 +274,7 @@ gst_nal_reader_suite (void)
   suite_add_tcase (s, tc_chain);
 
   tcase_add_test (tc_chain, test_initialization);
+  tcase_add_test (tc_chain, test_get_remaining);
   tcase_add_test (tc_chain, test_get_bits);
   tcase_add_test (tc_chain, test_emulation_prevention_skipping);
   tcase_add_test (tc_chain, test_golomb);
