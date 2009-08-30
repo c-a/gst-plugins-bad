@@ -19,6 +19,7 @@
  */
 
 #include <string.h>
+#include <math.h>
 
 #include "gstnalreader.h"
 
@@ -50,6 +51,11 @@ const guint8 default_8x8_inter[64] =
 };
 
 
+#define CHECK_ALLOWED(val, min, max) { \
+  if (val < min || val > max) \
+    goto error; \
+}
+
 #define READ_UINT8(reader, val, nbits) { \
   if (!gst_nal_reader_get_bits_uint8 (reader, &val, nbits)) \
     goto error; \
@@ -75,126 +81,121 @@ const guint8 default_8x8_inter[64] =
     goto error; \
 }
 
+#define READ_UE_ALLOWED(reader, val, min, max) { \
+  guint32 tmp; \
+  READ_UE (reader, tmp); \
+  CHECK_ALLOWED (tmp, min, max); \
+  val = tmp; \
+}
+
 #define READ_SE(reader, val) { \
   if (!gst_nal_reader_get_se (reader, &val)) \
     goto error; \
 }
 
+#define READ_SE_ALLOWED(reader, val, min, max) { \
+  gint32 tmp; \
+  READ_SE (reader, tmp); \
+  CHECK_ALLOWED (tmp, min, max); \
+  val = tmp; \
+}
 
 G_DEFINE_TYPE (GstH264Parser, gst_h264_parser, G_TYPE_OBJECT);
 
 static void
-gst_h264_parser_default_4x4_scaling_list (guint8 scaling_lists_4x4[6][16],
-    guint index)
+gst_h264_sequence_free (void *data)
 {
-  switch (index) {
-    case 0:
-      memcpy (scaling_lists_4x4[0], default_4x4_intra, 16);
-      break;
-    case 1:
-      memcpy (scaling_lists_4x4[1], scaling_lists_4x4[0], 16);
-      break;
-    case 2:
-      memcpy (scaling_lists_4x4[2], scaling_lists_4x4[1], 16);
-      break;
-    case 3:
-      memcpy (scaling_lists_4x4[3], default_4x4_inter, 16);
-      break;
-    case 4:
-      memcpy (scaling_lists_4x4[4], scaling_lists_4x4[3], 16);
-      break;
-    case 5:
-      memcpy (scaling_lists_4x4[5], scaling_lists_4x4[4], 16);
-      break;
-
-    default:
-      break;
-  }
-}
-
-static void
-gst_h264_parser_default_8x8_scaling_list (guint8 scaling_lists_8x8[6][64],
-    guint index)
-{
-  switch (index) {
-    case 1:
-      memcpy (scaling_lists_8x8[0], default_8x8_intra, 64);
-      break;
-    case 2:
-      memcpy (scaling_lists_8x8[1], default_8x8_inter, 64);
-      break;
-    case 3:
-      memcpy (scaling_lists_8x8[2], scaling_lists_8x8[0], 64);
-      break;
-    case 4:
-      memcpy (scaling_lists_8x8[3], scaling_lists_8x8[1], 64);
-      break;
-    case 5:
-      memcpy (scaling_lists_8x8[4], scaling_lists_8x8[2], 64);
-      break;
-    case 6:
-      memcpy (scaling_lists_8x8[5], scaling_lists_8x8[3], 64);
-      break;
-
-    default:
-      break;
-  }
+  g_slice_free (GstH264Sequence, data);
 }
 
 static gboolean
 gst_h264_parser_parse_scaling_list (GstNalReader * reader,
     guint8 scaling_lists_4x4[6][16], guint8 scaling_lists_8x8[6][64],
+    const guint8 fallback_4x4_inter[16], const guint8 fallback_4x4_intra[16],
+    const guint8 fallback_8x8_inter[64], const guint8 fallback_8x8_intra[64],
     guint32 chroma_format_idc)
 {
-  guint8 seq_scaling_matrix_flag;
+  gint i;
+  guint8 seq_scaling_list_present_flag[12] = { 0, };
 
-  READ_UINT8 (reader, seq_scaling_matrix_flag, 1);
-  if (seq_scaling_matrix_flag) {
-    gint i;
-    guint8 seq_scaling_list_present_flag[12] = { 0, };
+  for (i = 0; i < ((chroma_format_idc) != 3) ? 8 : 12; i++) {
+    READ_UINT8 (reader, seq_scaling_list_present_flag[i], 1);
+  }
 
-    for (i = 0; i < ((chroma_format_idc) != 3) ? 8 : 12; i++) {
-      READ_UINT8 (reader, seq_scaling_list_present_flag[i], 1);
-    }
+  for (i = 0; i < 12; i++) {
+    gboolean use_default = FALSE;
 
-    for (i = 0; i < 12; i++) {
-      gboolean use_default = FALSE;
+    if (seq_scaling_list_present_flag[i]) {
+      guint8 *scaling_list;
+      guint size;
+      guint j;
+      guint8 last_scale, next_scale;
 
-      if (seq_scaling_list_present_flag[i]) {
-        guint8 *scaling_list;
-        guint size;
-        guint j;
-        guint8 last_scale, next_scale;
+      if (i <= 5) {
+        scaling_list = scaling_lists_4x4[i];
+        size = 16;
+      } else {
+        scaling_list = scaling_lists_8x8[i];
+        size = 64;
+      }
 
-        if (i <= 5) {
-          scaling_list = scaling_lists_4x4[i];
-          size = 16;
-        } else {
-          scaling_list = scaling_lists_8x8[i];
-          size = 64;
+      last_scale = 8;
+      next_scale = 8;
+      for (j = 0; j < size; j++) {
+        if (next_scale != 0) {
+          gint32 delta_scale;
+
+          READ_SE (reader, delta_scale);
+          next_scale = (last_scale + delta_scale + 256) % 256;
+          use_default = (j == 0 && next_scale == 0);
         }
+        scaling_list[j] = (next_scale == 0) ? last_scale : next_scale;
+        last_scale = scaling_list[j];
+      }
+    } else
+      use_default = TRUE;
 
-        last_scale = 8;
-        next_scale = 8;
-        for (j = 0; j < size; j++) {
-          if (next_scale != 0) {
-            gint32 delta_scale;
+    if (use_default) {
+      switch (i) {
+        case 0:
+          memcpy (scaling_lists_4x4[0], fallback_4x4_intra, 16);
+          break;
+        case 1:
+          memcpy (scaling_lists_4x4[1], scaling_lists_4x4[0], 16);
+          break;
+        case 2:
+          memcpy (scaling_lists_4x4[2], scaling_lists_4x4[1], 16);
+          break;
+        case 3:
+          memcpy (scaling_lists_4x4[3], fallback_4x4_inter, 16);
+          break;
+        case 4:
+          memcpy (scaling_lists_4x4[4], scaling_lists_4x4[3], 16);
+          break;
+        case 5:
+          memcpy (scaling_lists_4x4[5], scaling_lists_4x4[4], 16);
+          break;
+        case 6:
+          memcpy (scaling_lists_8x8[0], fallback_8x8_intra, 64);
+          break;
+        case 7:
+          memcpy (scaling_lists_8x8[1], fallback_8x8_inter, 64);
+          break;
+        case 8:
+          memcpy (scaling_lists_8x8[2], scaling_lists_8x8[0], 64);
+          break;
+        case 9:
+          memcpy (scaling_lists_8x8[3], scaling_lists_8x8[1], 64);
+          break;
+        case 10:
+          memcpy (scaling_lists_8x8[4], scaling_lists_8x8[2], 64);
+          break;
+        case 11:
+          memcpy (scaling_lists_8x8[5], scaling_lists_8x8[3], 64);
+          break;
 
-            READ_SE (reader, delta_scale);
-            next_scale = (last_scale + delta_scale + 256) % 256;
-            use_default = (j == 0 && next_scale == 0);
-          }
-          scaling_list[j] = (next_scale == 0) ? last_scale : next_scale;
-          last_scale = scaling_list[j];
-        }
-      } else
-        use_default = TRUE;
-
-      if (use_default) {
-        if (i < 6)
-          gst_h264_parser_default_4x4_scaling_list (scaling_lists_4x4, i);
-        else
-          gst_h264_parser_default_8x8_scaling_list (scaling_lists_8x8, i - 6);
+        default:
+          break;
       }
     }
   }
@@ -210,7 +211,7 @@ gst_h264_parser_parse_sequence (GstH264Parser * parser, guint8 * data,
   GstNalReader reader = GST_NAL_READER_INIT (data, size);
   GstH264Sequence *seq;
 
-  g_return_val_if_fail (GST_H264_IS_PARSER (parser), NULL);
+  g_return_val_if_fail (GST_IS_H264_PARSER (parser), NULL);
   g_return_val_if_fail (data != NULL, NULL);
   g_return_val_if_fail (size > 0, NULL);
 
@@ -251,9 +252,14 @@ gst_h264_parser_parse_sequence (GstH264Parser * parser, guint8 * data,
     READ_UE (&reader, seq->bit_depth_chroma_minus8);
     READ_UINT8 (&reader, seq->qpprime_y_zero_transform_bypass_flag, 1);
 
-    if (!gst_h264_parser_parse_scaling_list (&reader, seq->scaling_lists_4x4,
-            seq->scaling_lists_8x8, seq->chroma_format_idc))
-      goto error;
+    READ_UINT8 (&reader, seq->scaling_matrix_present_flag, 1);
+    if (seq->scaling_matrix_present_flag) {
+      if (!gst_h264_parser_parse_scaling_list (&reader,
+              seq->scaling_lists_4x4, seq->scaling_lists_8x8,
+              default_4x4_inter, default_4x4_intra,
+              default_8x8_inter, default_8x8_intra, seq->chroma_format_idc))
+        goto error;
+    }
   }
 
   READ_UE (&reader, seq->log2_max_frame_num_minus4);
@@ -280,8 +286,38 @@ gst_h264_parser_parse_sequence (GstH264Parser * parser, guint8 * data,
   g_hash_table_insert (parser->sequences, GUINT_TO_POINTER (seq->id), seq);
 
 error:
-  g_slice_free (GstH264Sequence, seq);
+  gst_h264_sequence_free (seq);
   return NULL;
+}
+
+static void
+gst_h264_picture_free (void *data)
+{
+  GstH264Picture *pic = (GstH264Picture *) data;
+
+  if (pic->slice_group_id)
+    g_free (pic->slice_group_id);
+
+  g_slice_free (GstH264Picture, data);
+}
+
+static gboolean
+gst_h264_parser_more_data (GstNalReader * reader)
+{
+  guint remaining;
+
+  remaining = gst_nal_reader_get_remaining (reader);
+  if (remaining > 0 && remaining < 8) {
+    guint8 rbsp_stop_one_bit;
+
+    if (!gst_nal_reader_peek_bits_uint8 (reader, &rbsp_stop_one_bit, 1))
+      return FALSE;
+
+    if (rbsp_stop_one_bit == 1)
+      return FALSE;
+  }
+
+  return TRUE;
 }
 
 GstH264Picture *
@@ -293,11 +329,16 @@ gst_h264_parser_parse_picture (GstH264Parser * parser, guint8 * data,
   guint32 seq_parameter_set_id;
   GstH264Sequence *seq;
 
-  g_return_val_if_fail (GST_H264_IS_PARSER (parser), NULL);
+  g_return_val_if_fail (GST_IS_H264_PARSER (parser), NULL);
   g_return_val_if_fail (data != NULL, NULL);
   g_return_val_if_fail (size > 0, NULL);
 
   pic = g_slice_new (GstH264Picture);
+
+  /* set default values for fields that might not be present in the bitstream
+     and have valid defaults */
+  pic->slice_group_id = NULL;
+  pic->transform_8x8_mode_flag = 0;
 
   READ_UE (&reader, pic->id);
   READ_UE (&reader, seq_parameter_set_id);
@@ -310,12 +351,75 @@ gst_h264_parser_parse_picture (GstH264Parser * parser, guint8 * data,
 
   READ_UINT8 (&reader, pic->entropy_coding_mode_flag, 1);
   READ_UINT8 (&reader, pic->pic_order_present_flag, 1);
-  READ_UE (&reader, pic->num_slice_groups_minus1);
+  READ_UE_ALLOWED (&reader, pic->num_slice_groups_minus1, 0, 7);
   if (pic->num_slice_groups_minus1 > 0) {
+    READ_UE (&reader, pic->slice_group_map_type);
+    if (pic->slice_group_map_type == 0) {
+      gint i;
+
+      for (i = 0; i <= pic->num_slice_groups_minus1; i++)
+        READ_UE (&reader, pic->run_length_minus1[i]);
+    }
+  } else if (pic->slice_group_map_type == 2) {
+    gint i;
+
+    for (i = 0; i <= pic->num_slice_groups_minus1; i++) {
+      READ_UE (&reader, pic->top_left[i]);
+      READ_UE (&reader, pic->bottom_right[i]);
+    }
+  } else if (pic->slice_group_map_type >= 3 && pic->slice_group_map_type <= 5) {
+    READ_UINT8 (&reader, pic->slice_group_change_direction_flag, 1);
+    READ_UE (&reader, pic->slice_group_change_rate_minus1);
+  } else if (pic->slice_group_map_type == 6) {
+    gint bits;
+    gint i;
+
+    READ_UE (&reader, pic->pic_size_in_map_units_minus1);
+    bits = ceil (log2 (pic->num_slice_groups_minus1 + 1));
+
+    pic->slice_group_id = g_new (guint8, pic->pic_size_in_map_units_minus1 + 1);
+    for (i = 0; i <= pic->pic_size_in_map_units_minus1; i++)
+      READ_UINT8 (&reader, pic->slice_group_id[i], bits);
   }
 
+  READ_UE_ALLOWED (&reader, pic->num_ref_idx_l0_active_minus1, 0, 31);
+  READ_UE_ALLOWED (&reader, pic->num_ref_idx_l1_active_minus1, 0, 31);
+  READ_UINT8 (&reader, pic->weighted_pred_flag, 1);
+  READ_UINT8 (&reader, pic->weighted_bipred_idc, 1);
+  READ_SE_ALLOWED (&reader, pic->pic_init_qp_minus26, -26, 25);
+  READ_SE_ALLOWED (&reader, pic->pic_init_qs_minus26, -26, 25);
+  READ_SE_ALLOWED (&reader, pic->chroma_qp_index_offset, -12, 12);
+  READ_UINT8 (&reader, pic->deblocking_filter_control_present_flag, 1);
+  READ_UINT8 (&reader, pic->constrained_intra_pred_flag, 1);
+  READ_UINT8 (&reader, pic->redundant_pic_cnt_present_flag, 1);
+
+  if (!gst_h264_parser_more_data (&reader))
+    return pic;
+
+  READ_UINT8 (&reader, pic->transform_8x8_mode_flag, 1);
+
+  READ_UINT8 (&reader, pic->scaling_matrix_present_flag, 1);
+  if (pic->scaling_matrix_present_flag) {
+    if (seq->scaling_matrix_present_flag) {
+      if (!gst_h264_parser_parse_scaling_list (&reader,
+              pic->scaling_lists_4x4, pic->scaling_lists_8x8,
+              seq->scaling_lists_4x4[0], seq->scaling_lists_4x4[3],
+              seq->scaling_lists_8x8[0], seq->scaling_lists_8x8[3],
+              seq->chroma_format_idc))
+        goto error;
+    } else {
+      if (!gst_h264_parser_parse_scaling_list (&reader,
+              seq->scaling_lists_4x4, seq->scaling_lists_8x8,
+              default_4x4_inter, default_4x4_intra,
+              default_8x8_inter, default_8x8_intra, seq->chroma_format_idc))
+        goto error;
+    }
+  }
+
+  READ_SE_ALLOWED (&reader, pic->second_chroma_qp_index_offset, -12, 12);
+
 error:
-  g_slice_free (GstH264Picture, pic);
+  gst_h264_picture_free (pic);
   return NULL;
 }
 
@@ -328,7 +432,7 @@ gst_h264_parser_parse_slice_header (GstH264Parser * parser,
   GstH264Picture *pic;
   GstH264Sequence *seq;
 
-  g_return_val_if_fail (GST_H264_IS_PARSER (parser), FALSE);
+  g_return_val_if_fail (GST_IS_H264_PARSER (parser), FALSE);
   g_return_val_if_fail (slice != NULL, FALSE);
   g_return_val_if_fail (data != NULL, FALSE);
   g_return_val_if_fail (size > 0, FALSE);
@@ -402,30 +506,22 @@ gst_h264_parser_parse_slice_header (GstH264Parser * parser,
     }
   }
 
+
   return TRUE;
 
 error:
   return FALSE;
 }
 
+#undef CHECK_ALLOWED
 #undef READ_UINT8
 #undef READ_UINT16
 #undef READ_UINT32
 #undef READ_UINT64
 #undef READ_UE
+#undef READ_UE_ALLOWED
 #undef READ_SE
-
-static void
-gst_h264_sequence_free (void *data)
-{
-  g_slice_free (GstH264Sequence, data);
-}
-
-static void
-gst_h264_picture_free (void *data)
-{
-  g_slice_free (GstH264Picture, data);
-}
+#undef READ_SE_ALLOWED
 
 static void
 gst_h264_parser_init (GstH264Parser * object)

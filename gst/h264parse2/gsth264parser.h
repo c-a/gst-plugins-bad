@@ -77,6 +77,7 @@ struct _GstH264Sequence
   guint32 bit_depth_chroma_minus8;
   guint8 qpprime_y_zero_transform_bypass_flag;
 
+  guint8 scaling_matrix_present_flag;
   guint8 scaling_lists_4x4[6][16];
   guint8 scaling_lists_8x8[6][64];
 
@@ -108,10 +109,42 @@ struct _GstH264Picture
 
   guint8 entropy_coding_mode_flag;
   guint8 pic_order_present_flag;
+
   guint32 num_slice_groups_minus1;
 
   /* if num_slice_groups_minus1 > 0 */
   guint32 slice_group_map_type;
+  /* and if slice_group_map_type == 0 */
+  guint32 run_length_minus1[8];
+  /* or if slice_group_map_type == 2 */
+  guint32 top_left[8];
+  guint32 bottom_right[8];
+  /* or if slice_group_map_type == (3, 4, 5) */
+  guint8 slice_group_change_direction_flag;
+  guint32 slice_group_change_rate_minus1;
+  /* or if slice_group_map_type == 6 */
+  guint32 pic_size_in_map_units_minus1;
+  guint8 *slice_group_id;
+
+  guint8 num_ref_idx_l0_active_minus1;
+  guint8 num_ref_idx_l1_active_minus1;
+  guint8 weighted_pred_flag;
+  guint8 weighted_bipred_idc;
+  gint8 pic_init_qp_minus26;
+  gint8 pic_init_qs_minus26;
+  gint8 chroma_qp_index_offset;
+  guint8 deblocking_filter_control_present_flag;
+  guint8 constrained_intra_pred_flag;
+  guint8 redundant_pic_cnt_present_flag;
+
+  guint8 transform_8x8_mode_flag;
+
+  guint8 scaling_matrix_present_flag;
+  /* if scaling_matrix_present_flag == 1 */
+  guint8 scaling_lists_4x4[6][16];
+  guint8 scaling_lists_8x8[6][64];
+
+  guint8 second_chroma_qp_index_offset;
 };
 
 struct _GstH264Slice
