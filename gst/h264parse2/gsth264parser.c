@@ -244,7 +244,7 @@ gst_h264_parser_parse_sequence (GstH264Parser * parser, guint8 * data,
       seq->profile_idc == 122 || seq->profile_idc == 244 ||
       seq->profile_idc == 244 || seq->profile_idc == 44 ||
       seq->profile_idc == 83 || seq->profile_idc == 86) {
-    READ_UE (&reader, seq->chroma_format_idc);
+    READ_UE_ALLOWED (&reader, seq->chroma_format_idc, 0, 3);
     if (seq->chroma_format_idc == 3)
       READ_UINT8 (&reader, seq->separate_colour_plane_flag, 1);
 
@@ -423,6 +423,120 @@ error:
   return NULL;
 }
 
+static gboolean
+gst_h264_slice_parse_pred_weight_table (GstH264Slice * slice,
+    GstNalReader * reader,
+    const GstH264Sequence * seq, const GstH264Picture * pic)
+{
+  GstH264PredWeightTable *p;
+  gint i;
+
+  p = &slice->pred_weight_table;
+
+  READ_UE_ALLOWED (reader, p->luma_log2_weight_denom, 0, 7);
+  /* set default values */
+  memset (p->luma_weight_l0, pow (2, p->luma_log2_weight_denom), 32);
+  memset (p->luma_offset_l0, 0, 32);
+
+  if (seq->ChromaArrayType != 0) {
+    READ_UE_ALLOWED (reader, p->chroma_log2_weight_denom, 0, 7);
+    /* set default values */
+    memset (p->chroma_weight_l0, pow (2, p->chroma_log2_weight_denom), 64);
+    memset (p->chroma_offset_l0, 0, 64);
+  }
+
+  for (i = 0; i <= pic->num_ref_idx_l0_active_minus1; i++) {
+    guint8 luma_weight_l0_flag;
+
+    READ_UINT8 (reader, luma_weight_l0_flag, 1);
+    if (luma_weight_l0_flag) {
+      READ_SE_ALLOWED (reader, p->luma_weight_l0[i], -128, 127);
+      READ_SE_ALLOWED (reader, p->luma_offset_l0[i], -128, 127);
+    }
+    if (seq->ChromaArrayType != 0) {
+      guint8 chroma_weight_l0_flag;
+      gint j;
+
+      READ_UINT8 (reader, chroma_weight_l0_flag, 1);
+      for (j = 0; j <= 2; j++) {
+        READ_SE_ALLOWED (reader, p->chroma_weight_l0[i][j], -128, 127);
+        READ_SE_ALLOWED (reader, p->chroma_offset_l0[i][j], -128, 127);
+      }
+    }
+  }
+
+  if (slice->slice_type % 5 == 1) {
+    for (i = 0; i <= pic->num_ref_idx_l1_active_minus1; i++) {
+      guint8 luma_weight_l1_flag;
+
+      READ_UINT8 (reader, luma_weight_l1_flag, 1);
+      if (luma_weight_l1_flag) {
+        READ_SE_ALLOWED (reader, p->luma_weight_l1[i], -128, 127);
+        READ_SE_ALLOWED (reader, p->luma_offset_l1[i], -128, 127);
+      }
+      if (seq->ChromaArrayType != 0) {
+        guint8 chroma_weight_l1_flag;
+        gint j;
+
+        READ_UINT8 (reader, chroma_weight_l1_flag, 1);
+        for (j = 0; j <= 2; j++) {
+          READ_SE_ALLOWED (reader, p->chroma_weight_l1[i][j], -128, 127);
+          READ_SE_ALLOWED (reader, p->chroma_offset_l1[i][j], -128, 127);
+        }
+      }
+    }
+  }
+
+error:
+  return FALSE;
+}
+
+static gboolean
+gst_h264_slice_parse_ref_pic_list_reordering (GstH264Slice * slice,
+    GstNalReader * reader)
+{
+  if (slice->slice_type % 5 != 2 && slice->slice_type % 5 != 4) {
+    guint8 ref_pic_list_reordering_flag_l0;
+    guint8 reordering_of_pic_nums_idc;
+
+    READ_UINT8 (reader, ref_pic_list_reordering_flag_l0, 1);
+    if (ref_pic_list_reordering_flag_l0)
+      do {
+        READ_UE_ALLOWED (reader, reordering_of_pic_nums_idc, 0, 3);
+        if (reordering_of_pic_nums_idc == 0 || reordering_of_pic_nums_idc == 1) {
+          guint32 abs_diff_num_minus1;
+          READ_UE (reader, abs_diff_num_minus1);
+        } else if (reordering_of_pic_nums_idc == 3) {
+          guint32 long_term_pic_num;
+
+          READ_UE (reader, long_term_pic_num);
+        }
+      } while (reordering_of_pic_nums_idc != 3);
+  }
+
+  if (slice->slice_type % 5 == 1) {
+    guint8 ref_pic_list_reordering_flag_l1;
+    guint8 reordering_of_pic_nums_idc;
+
+    READ_UINT8 (reader, ref_pic_list_reordering_flag_l1, 1);
+    if (ref_pic_list_reordering_flag_l1)
+      do {
+        READ_UE_ALLOWED (reader, reordering_of_pic_nums_idc, 0, 3);
+        if (reordering_of_pic_nums_idc == 0 || reordering_of_pic_nums_idc == 1) {
+          guint32 abs_diff_num_minus1;
+          READ_UE (reader, abs_diff_num_minus1);
+        } else if (reordering_of_pic_nums_idc == 3) {
+          guint32 long_term_pic_num;
+
+          READ_UE (reader, long_term_pic_num);
+        }
+      } while (reordering_of_pic_nums_idc != 3);
+  }
+
+error:
+  return FALSE;
+}
+
 gboolean
 gst_h264_parser_parse_slice_header (GstH264Parser * parser,
     GstH264Slice * slice, guint8 * data, guint size, guint32 nal_unit_type)
@@ -506,6 +620,13 @@ gst_h264_parser_parse_slice_header (GstH264Parser * parser,
     }
   }
 
+  if (!gst_h264_slice_parse_ref_pic_list_reordering (slice, &reader))
+    return FALSE;
+
+  if ((pic->weighted_pred_flag && (slice->slice_type % 5 == 0)) ||
+      (pic->weighted_bipred_idc && slice->slice_type == GST_H264_B_SLICE))
+    if (!gst_h264_slice_parse_pred_weight_table (slice, &reader, seq, pic))
+      return FALSE;
 
   return TRUE;
 

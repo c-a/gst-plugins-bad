@@ -58,6 +58,7 @@ typedef enum
 
 typedef struct _GstH264Sequence GstH264Sequence;
 typedef struct _GstH264Picture GstH264Picture;
+typedef struct _GstH264PredWeightTable GstH264PredWeightTable;
 typedef struct _GstH264Slice GstH264Slice;
 
 struct _GstH264Sequence
@@ -99,6 +100,9 @@ struct _GstH264Sequence
   guint32 pic_width_in_mbs_minus1;
   guint32 pic_height_in_map_units_minus1;
   guint8 frame_mbs_only_flag;
+
+  /* calculated values */
+  guint8 ChromaArrayType;
 };
 
 struct _GstH264Picture
@@ -147,6 +151,26 @@ struct _GstH264Picture
   guint8 second_chroma_qp_index_offset;
 };
 
+struct _GstH264PredWeightTable
+{
+  guint8 luma_log2_weight_denom;
+  guint8 chroma_log2_weight_denom;
+
+  guint8 luma_weight_l0[32];
+  guint8 luma_offset_l0[32];
+
+  /* if seq->ChromaArrayType != 0 */
+  guint8 chroma_weight_l0[32][2];
+  guint8 chroma_offset_l0[32][2];
+
+  /* if slice->slice_type % 5 == 1 */
+  guint8 luma_weight_l1[32];
+  guint8 luma_offset_l1[32];
+  /* and if seq->ChromaArrayType != 0 */
+  guint8 chroma_weight_l1[32][2];
+  guint8 chroma_offset_l1[32][2];
+};
+
 struct _GstH264Slice
 { 
   guint32 first_mb_in_slice;
@@ -178,6 +202,8 @@ struct _GstH264Slice
 
   guint32 num_ref_idx_l0_active_minus1;
   guint32 num_ref_idx_l1_active_minus1;
+
+  GstH264PredWeightTable pred_weight_table;
 };
 
 #define GST_TYPE_H264_PARSER             (gst_h264_parser_get_type ())
