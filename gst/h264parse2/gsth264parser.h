@@ -82,7 +82,7 @@ struct _GstH264Sequence
   guint8 scaling_lists_4x4[6][16];
   guint8 scaling_lists_8x8[6][64];
 
-  guint32 log2_max_frame_num_minus4;
+  guint8 log2_max_frame_num_minus4;
   guint32 pic_order_cnt_type;
 
   /* if pic_order_cnt_type == 0 */
@@ -103,6 +103,7 @@ struct _GstH264Sequence
 
   /* calculated values */
   guint8 ChromaArrayType;
+  guint32 MaxFrameNum;
 };
 
 struct _GstH264Picture
@@ -204,6 +205,9 @@ struct _GstH264Slice
   guint32 num_ref_idx_l1_active_minus1;
 
   GstH264PredWeightTable pred_weight_table;
+
+  /* calculated values */
+  guint32 MaxPicNum;
 };
 
 #define GST_TYPE_H264_PARSER             (gst_h264_parser_get_type ())

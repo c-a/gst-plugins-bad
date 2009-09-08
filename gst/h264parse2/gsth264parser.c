@@ -262,7 +262,10 @@ gst_h264_parser_parse_sequence (GstH264Parser * parser, guint8 * data,
     }
   }
 
-  READ_UE (&reader, seq->log2_max_frame_num_minus4);
+  READ_UE_ALLOWED (&reader, seq->log2_max_frame_num_minus4, 0, 12);
+  /* calculate MaxFrameNum */
+  seq->MaxFrameNum = pow (2, seq->log2_max_frame_num_minus4 + 4);
+
   READ_UE (&reader, seq->pic_order_cnt_type);
   if (seq->pic_order_cnt_type == 0) {
     READ_UE (&reader, seq->log2_max_pic_order_cnt_lsb_minus4);
@@ -504,9 +507,13 @@ gst_h264_slice_parse_ref_pic_list_reordering (GstH264Slice * slice,
       do {
         READ_UE_ALLOWED (reader, reordering_of_pic_nums_idc, 0, 3);
         if (reordering_of_pic_nums_idc == 0 || reordering_of_pic_nums_idc == 1) {
-          guint32 abs_diff_num_minus1;
-          READ_UE (reader, abs_diff_num_minus1);
-        } else if (reordering_of_pic_nums_idc == 3) {
+          guint32 abs_diff_pic_num_minus1;
+
+          READ_UE_ALLOWED (reader, abs_diff_pic_num_minus1, 0,
+              slice->MaxPicNum - 1);
+
+
+        } else if (reordering_of_pic_nums_idc == 2) {
           guint32 long_term_pic_num;
 
           READ_UE (reader, long_term_pic_num);
@@ -583,6 +590,12 @@ gst_h264_parser_parse_slice_header (GstH264Parser * parser,
     if (slice->field_pic_flag)
       READ_UINT8 (&reader, slice->bottom_field_flag, 1);
   }
+
+  /* calculate MaxPicNum */
+  if (slice->field_pic_flag)
+    slice->MaxPicNum = seq->MaxFrameNum;
+  else
+    slice->MaxPicNum = 2 * seq->MaxFrameNum;
 
   if (nal_unit_type == 5)
     READ_UE (&reader, slice->idr_pic_id);
