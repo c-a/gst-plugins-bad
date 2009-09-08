@@ -511,8 +511,6 @@ gst_h264_slice_parse_ref_pic_list_reordering (GstH264Slice * slice,
 
           READ_UE_ALLOWED (reader, abs_diff_pic_num_minus1, 0,
               slice->MaxPicNum - 1);
-
-
         } else if (reordering_of_pic_nums_idc == 2) {
           guint32 long_term_pic_num;
 
@@ -544,9 +542,60 @@ error:
   return FALSE;
 }
 
+static gboolean
+gst_h264_slice_parse_dec_ref_pic_marking (GstH264Slice * slice,
+    GstNalReader * reader)
+{
+  GstH264DecRefPicMarking *m;
+
+  m = &slice->dec_ref_pic_marking;
+
+  if (slice->nal_unit.IdrPicFlag) {
+    READ_UINT8 (reader, m->no_output_of_prior_pics_flag, 1);
+    READ_UINT8 (reader, m->long_term_reference_flag, 1);
+  } else {
+    READ_UINT8 (reader, m->adaptive_ref_pic_marking_mode_flag, 1);
+    if (m->adaptive_ref_pic_marking_mode_flag) {
+      guint8 memory_management_control_operation;
+
+      do {
+        READ_UE_ALLOWED (reader, memory_management_control_operation, 0, 6);
+        if (memory_management_control_operation == 1 ||
+            memory_management_control_operation == 3) {
+          guint32 difference_of_pic_nums_minus1;
+
+          READ_UE (reader, difference_of_pic_nums_minus1);
+        }
+        if (memory_management_control_operation == 2) {
+          guint32 long_term_pic_num;
+
+          READ_UE (reader, long_term_pic_num);
+        }
+        if (memory_management_control_operation == 3 ||
+            memory_management_control_operation == 6) {
+          guint32 long_term_frame_idx;
+
+          READ_UE (reader, long_term_frame_idx);
+        }
+        if (memory_management_control_operation == 4) {
+          guint32 max_long_term_frame_idx_plus1;
+
+          READ_UE (reader, max_long_term_frame_idx_plus1);
+        }
+      }
+      while (memory_management_control_operation != 0);
+    }
+  }
+
+  return TRUE;
+
+error:
+  return FALSE;
+}
+
 gboolean
 gst_h264_parser_parse_slice_header (GstH264Parser * parser,
-    GstH264Slice * slice, guint8 * data, guint size, guint32 nal_unit_type)
+    GstH264Slice * slice, guint8 * data, guint size, GstNalUnit nal_unit)
 {
   GstNalReader reader = GST_NAL_READER_INIT (data, size);
   guint32 pic_parameter_set_id;
@@ -557,6 +606,8 @@ gst_h264_parser_parse_slice_header (GstH264Parser * parser,
   g_return_val_if_fail (slice != NULL, FALSE);
   g_return_val_if_fail (data != NULL, FALSE);
   g_return_val_if_fail (size > 0, FALSE);
+
+  memcpy (&slice->nal_unit, &nal_unit, sizeof (GstNalUnit));
 
   READ_UE (&reader, slice->first_mb_in_slice);
   READ_UE (&reader, slice->slice_type);
@@ -597,7 +648,7 @@ gst_h264_parser_parse_slice_header (GstH264Parser * parser,
   else
     slice->MaxPicNum = 2 * seq->MaxFrameNum;
 
-  if (nal_unit_type == 5)
+  if (nal_unit.type == 5)
     READ_UE (&reader, slice->idr_pic_id);
 
   if (seq->pic_order_cnt_type == 0) {
@@ -640,6 +691,11 @@ gst_h264_parser_parse_slice_header (GstH264Parser * parser,
       (pic->weighted_bipred_idc && slice->slice_type == GST_H264_B_SLICE))
     if (!gst_h264_slice_parse_pred_weight_table (slice, &reader, seq, pic))
       return FALSE;
+
+  if (nal_unit.ref_idc != 0) {
+    if (!gst_h264_slice_parse_dec_ref_pic_marking (slice, &reader))
+      return FALSE;
+  }
 
   return TRUE;
 

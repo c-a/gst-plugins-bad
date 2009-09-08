@@ -56,10 +56,22 @@ typedef enum
   GST_H264_S_SI_SLICE
 } GstH264SliceType;
 
+typedef struct _GstNalUnit GstNalUnit;
 typedef struct _GstH264Sequence GstH264Sequence;
 typedef struct _GstH264Picture GstH264Picture;
+
+typedef struct _GstH264DecRefPicMarking GstH264DecRefPicMarking;
 typedef struct _GstH264PredWeightTable GstH264PredWeightTable;
 typedef struct _GstH264Slice GstH264Slice;
+
+struct _GstNalUnit
+{
+  guint8 ref_idc;
+  guint8 type;
+
+  /* calculated values */
+  guint8 IdrPicFlag;
+};
 
 struct _GstH264Sequence
 {
@@ -152,6 +164,16 @@ struct _GstH264Picture
   guint8 second_chroma_qp_index_offset;
 };
 
+struct _GstH264DecRefPicMarking
+{
+  /* if slice->nal_unit.IdrPicFlag */
+  guint8 no_output_of_prior_pics_flag;
+  guint8 long_term_reference_flag;
+
+  /* else */
+  guint8 adaptive_ref_pic_marking_mode_flag;
+};
+
 struct _GstH264PredWeightTable
 {
   guint8 luma_log2_weight_denom;
@@ -173,7 +195,9 @@ struct _GstH264PredWeightTable
 };
 
 struct _GstH264Slice
-{ 
+{
+  GstNalUnit nal_unit;
+  
   guint32 first_mb_in_slice;
   guint32 slice_type;
   
@@ -187,7 +211,7 @@ struct _GstH264Slice
   guint8 field_pic_flag;
   guint8 bottom_field_flag;
 
-  /* if nal_unit_type == 5 */
+  /* if nal_unit.type == 5 */
   guint32 idr_pic_id;
 
   /* if seq->pic_order_cnt_type == 0 */
@@ -205,6 +229,8 @@ struct _GstH264Slice
   guint32 num_ref_idx_l1_active_minus1;
 
   GstH264PredWeightTable pred_weight_table;
+  /* if nal_unit.ref_idc != 0 */
+  GstH264DecRefPicMarking dec_ref_pic_marking;
 
   /* calculated values */
   guint32 MaxPicNum;
