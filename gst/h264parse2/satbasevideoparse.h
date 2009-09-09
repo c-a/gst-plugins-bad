@@ -18,8 +18,8 @@
  * Boston, MA 02111-1307, USA.
  */
 
-#ifndef _GST_BASE_VIDEO_PARSE_H_
-#define _GST_BASE_VIDEO_PARSE_H_
+#ifndef _SAT_BASE_VIDEO_PARSE_H_
+#define _SAT_BASE_VIDEO_PARSE_H_
 
 #define GST_USE_UNSTABLE_API
 
@@ -27,76 +27,76 @@
 
 G_BEGIN_DECLS
 
-#define GST_TYPE_BASE_VIDEO_PARSE           (gst_base_video_parse_get_type())
-#define GST_BASE_VIDEO_PARSE(obj)           (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_BASE_VIDEO_PARSE,GstBaseVideoParse))
-#define GST_BASE_VIDEO_PARSE_CLASS(klass)   (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_BASE_VIDEO_PARSE,GstBaseVideoParseClass))
-#define GST_BASE_VIDEO_PARSE_GET_CLASS(obj) (G_TYPE_INSTANCE_GET_CLASS((obj),GST_TYPE_BASE_VIDEO_PARSE,GstBaseVideoParseClass))
-#define GST_IS_BASE_VIDEO_PARSE(obj)        (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_BASE_VIDEO_PARSE))
-#define GST_IS_BASE_VIDEO_PARSE_CLASS(obj)  (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_BASE_VIDEO_PARSE))
+#define GST_TYPE_BASE_VIDEO_PARSE           (sat_base_video_parse_get_type())
+#define SAT_BASE_VIDEO_PARSE(obj)           (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_BASE_VIDEO_PARSE,SatBaseVideoParse))
+#define SAT_BASE_VIDEO_PARSE_CLASS(klass)   (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_BASE_VIDEO_PARSE,SatBaseVideoParseClass))
+#define SAT_BASE_VIDEO_PARSE_GET_CLASS(obj) (G_TYPE_INSTANCE_GET_CLASS((obj),GST_TYPE_BASE_VIDEO_PARSE,SatBaseVideoParseClass))
+#define SAT_IS_BASE_VIDEO_PARSE(obj)        (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_BASE_VIDEO_PARSE))
+#define SAT_IS_BASE_VIDEO_PARSE_CLASS(obj)  (G_TYPE_CHECK_CLASS_TYPE((klass),SAT_TYPE_BASE_VIDEO_PARSE))
 
 /**
-   * GST_BASE_VIDEO_PARSE_SINK_NAME:
+   * SAT_BASE_VIDEO_PARSE_SINK_NAME:
    *
    * The name of the templates for the sink pad.
    */
-#define GST_BASE_VIDEO_PARSE_SINK_NAME    "sink"
+#define SAT_BASE_VIDEO_PARSE_SINK_NAME    "sink"
 /**
-   * GST_BASE_VIDEO_PARSE_SRC_NAME:
+   * SAT_BASE_VIDEO_PARSE_SRC_NAME:
    *
    * The name of the templates for the source pad.
    */
-#define GST_BASE_VIDEO_PARSE_SRC_NAME     "src"
+#define SAT_BASE_VIDEO_PARSE_SRC_NAME     "src"
 
 /**
- * GST_BASE_VIDEO_PARSE_SRC_PAD:
+ * SAT_BASE_VIDEO_PARSE_SRC_PAD:
  * @obj: base video codec instance
  *
  * Gives the pointer to the source #GstPad object of the element.
  */
-#define GST_BASE_VIDEO_PARSE_SRC_PAD(obj)         (((GstBaseVideoParse *) (obj))->srcpad)
+#define SAT_BASE_VIDEO_PARSE_SRC_PAD(obj)         (((SatBaseVideoParse *) (obj))->srcpad)
 
 /**
- * GST_BASE_VIDEO_PARSE_SINK_PAD:
+ * SAT_BASE_VIDEO_PARSE_SINK_PAD:
  * @obj: base video codec instance
  *
  * Gives the pointer to the sink #GstPad object of the element.
  */
-#define GST_BASE_VIDEO_PARSE_SINK_PAD(obj)        (((GstBaseVideoParse *) (obj))->sinkpad)
+#define SAT_BASE_VIDEO_PARSE_SINK_PAD(obj)        (((SatBaseVideoParse *) (obj))->sinkpad)
 
 /**
-   * GST_BASE_VIDEO_PARSE_FLOW_NEED_DATA:
+   * SAT_BASE_VIDEO_PARSE_FLOW_NEED_DATA:
    *
    */
-#define GST_BASE_VIDEO_PARSE_FLOW_NEED_DATA GST_FLOW_CUSTOM_SUCCESS
+#define SAT_BASE_VIDEO_PARSE_FLOW_NEED_DATA GST_FLOW_CUSTOM_SUCCESS
 
 /**
- * GST_BASE_VIDEO_PARSE_LOCK
+ * SAT_BASE_VIDEO_PARSE_LOCK
  * @obj base video parse instance 
  *
  * Obtain a lock to protect the parse function from concurrent access.
  */
-#define GST_BASE_VIDEO_PARSE_LOCK(obj) g_mutex_lock (((GstBaseVideoParse *) (obj))->parse_lock)
+#define SAT_BASE_VIDEO_PARSE_LOCK(obj) g_mutex_lock (((SatBaseVideoParse *) (obj))->parse_lock)
 
 /**
- * GST_BASE_VIDEO_PARSE_UNLOCK
+ * SAT_BASE_VIDEO_PARSE_UNLOCK
  * @obj base video parse instance 
  *
  * Release the lock that protects the parse function from concurrent access.
  */
-#define GST_BASE_VIDEO_PARSE_UNLOCK(obj) g_mutex_unlock (((GstBaseVideoParse *) (obj))->parse_lock)
+#define SAT_BASE_VIDEO_PARSE_UNLOCK(obj) g_mutex_unlock (((SatBaseVideoParse *) (obj))->parse_lock)
 
-typedef enum _GstBaseVideoParseScanResult GstBaseVideoParseScanResult;
+typedef enum _SatBaseVideoParseScanResult SatBaseVideoParseScanResult;
 
-enum _GstBaseVideoParseScanResult
+enum _SatBaseVideoParseScanResult
 {
-  GST_BASE_VIDEO_PARSE_SCAN_RESULT_OK,
-  GST_BASE_VIDEO_PARSE_SCAN_RESULT_LOST_SYNC,
-  GST_BASE_VIDEO_PARSE_SCAN_RESULT_NEED_DATA
+  SAT_BASE_VIDEO_PARSE_SCAN_RESULT_OK,
+  SAT_BASE_VIDEO_PARSE_SCAN_RESULT_LOST_SYNC,
+  SAT_BASE_VIDEO_PARSE_SCAN_RESULT_NEED_DATA
 };
 
-typedef struct _GstBaseVideoParseFrame GstBaseVideoParseFrame;
+typedef struct _SatBaseVideoParseFrame SatBaseVideoParseFrame;
 
-struct _GstBaseVideoParseFrame
+struct _SatBaseVideoParseFrame
 {
   GstClockTime upstream_timestamp;
   guint64 byte_offset;
@@ -119,10 +119,10 @@ struct _GstBaseVideoParseFrame
   GstBufferList *buffer_list;
 };
 
-typedef struct _GstBaseVideoParse GstBaseVideoParse;
-typedef struct _GstBaseVideoParseClass GstBaseVideoParseClass;
+typedef struct _SatBaseVideoParse SatBaseVideoParse;
+typedef struct _SatBaseVideoParseClass SatBaseVideoParseClass;
 
-struct _GstBaseVideoParse
+struct _SatBaseVideoParse
 {
   GstElement element;
 
@@ -144,7 +144,7 @@ struct _GstBaseVideoParse
 
   gboolean have_sync;
 
-  GstBaseVideoParseFrame *current_frame;
+  SatBaseVideoParseFrame *current_frame;
   gint distance_from_sync;
 
   GstBufferList *buffer_list;
@@ -166,7 +166,7 @@ struct _GstBaseVideoParse
 };
 
 /**
- * GstBaseVideoParseClass:
+ * SatBaseVideoParseClass:
  * @start:               Optional.
  *                       Called when the element starts processing.
  *                       Allows opening external resources.
@@ -200,70 +200,70 @@ struct _GstBaseVideoParse
  * needed. At minimum @scan_for_sync, @scan_for_packet_end, @parse_data and
  * @get_base_caps needs to be overridden.
  */
-struct _GstBaseVideoParseClass
+struct _SatBaseVideoParseClass
 {
   GstElementClass element_class;
 
-  gboolean      (*start)               (GstBaseVideoParse *parse);
-  gboolean      (*stop)                (GstBaseVideoParse *parse);
+  gboolean      (*start)               (SatBaseVideoParse *parse);
+  gboolean      (*stop)                (SatBaseVideoParse *parse);
 
-  void          (*flush)               (GstBaseVideoParse *parse);
+  void          (*flush)               (SatBaseVideoParse *parse);
 
-  gint          (*scan_for_sync)       (GstBaseVideoParse *parse,
+  gint          (*scan_for_sync)       (SatBaseVideoParse *parse,
                                         GstAdapter *adapter);
   
-  GstBaseVideoParseScanResult (*scan_for_packet_end) (GstBaseVideoParse *parse,
+  SatBaseVideoParseScanResult (*scan_for_packet_end) (SatBaseVideoParse *parse,
                                                       GstAdapter *adapter,
                                                       guint *size);
   
-  GstFlowReturn (*parse_data)          (GstBaseVideoParse *parse,
+  GstFlowReturn (*parse_data)          (SatBaseVideoParse *parse,
                                         GstBuffer *buffer);
 
-  GstFlowReturn (*shape_output)        (GstBaseVideoParse *parse,
-                                        GstBaseVideoParseFrame *frame);
+  GstFlowReturn (*shape_output)        (SatBaseVideoParse *parse,
+                                        SatBaseVideoParseFrame *frame);
 
-  gboolean      (*set_sink_caps)       (GstBaseVideoParse *parse,
+  gboolean      (*set_sink_caps)       (SatBaseVideoParse *parse,
                                         GstCaps *caps);
-  GstCaps      *(*get_base_caps)       (GstBaseVideoParse *parse);
+  GstCaps      *(*get_base_caps)       (SatBaseVideoParse *parse);
 
-  gboolean      (*convert)             (GstBaseVideoParse *parse,
+  gboolean      (*convert)             (SatBaseVideoParse *parse,
                                         GstFormat src_format,
                                         gint64 src_value,
                                         GstFormat dest_format,
                                         gint64 * dest_value);
 
-  gboolean      (*sink_event)          (GstBaseVideoParse *parse,
+  gboolean      (*sink_event)          (SatBaseVideoParse *parse,
                                         GstEvent *event);
 
-  gboolean      (*src_event)           (GstBaseVideoParse *parse,
+  gboolean      (*src_event)           (SatBaseVideoParse *parse,
                                         GstEvent *event);
 };
 
-GType gst_base_video_parse_get_type (void);
+GType sat_base_video_parse_get_type (void);
 
-GstVideoState  gst_base_video_parse_get_state           (GstBaseVideoParse *parse);
-void           gst_base_video_parse_set_state           (GstBaseVideoParse *parse,
+GstVideoState  sat_base_video_parse_get_state           (SatBaseVideoParse *parse);
+void           sat_base_video_parse_set_state           (SatBaseVideoParse *parse,
                                                          GstVideoState state);
 
-void           gst_base_video_parse_set_duration        (GstBaseVideoParse *parse, 
+void           sat_base_video_parse_set_duration        (SatBaseVideoParse *parse, 
                                                          GstFormat format,
                                                          gint64 duration);
 
-void           gst_base_video_parse_lost_sync           (GstBaseVideoParse *parse);
+void           sat_base_video_parse_lost_sync           (SatBaseVideoParse *parse);
 
-void           gst_base_video_parse_frame_add           (GstBaseVideoParse *parse,
+void           sat_base_video_parse_frame_add           (SatBaseVideoParse *parse,
                                                          GstBuffer *buffer);
-GstFlowReturn  gst_base_video_parse_frame_finish        (GstBaseVideoParse *parse);
-void           gst_base_video_parse_frame_set_timestamp (GstBaseVideoParse *parse,
+GstFlowReturn  sat_base_video_parse_frame_finish        (SatBaseVideoParse *parse);
+void           sat_base_video_parse_frame_set_timestamp (SatBaseVideoParse *parse,
                                                          GstClockTime timestamp);
-void           gst_base_video_parse_frame_set_frame_nr  (GstBaseVideoParse *parse,
+void           sat_base_video_parse_frame_set_frame_nr  (SatBaseVideoParse *parse,
                                                          guint64 frame_number);
-void           gst_base_video_parse_frame_set_duration  (GstBaseVideoParse *parse,
+void           sat_base_video_parse_frame_set_duration  (SatBaseVideoParse *parse,
                                                          GstClockTime duration);
-void           gst_base_video_parse_frame_set_keyframe  (GstBaseVideoParse *parse);
+void           sat_base_video_parse_frame_set_keyframe  (SatBaseVideoParse *parse);
 
-void           gst_base_video_parse_set_sync_point      (GstBaseVideoParse *parse);
-GstFlowReturn  gst_base_video_parse_push                (GstBaseVideoParse *parse,
+void           sat_base_video_parse_set_sync_point      (SatBaseVideoParse *parse);
+GstFlowReturn  sat_base_video_parse_push                (SatBaseVideoParse *parse,
                                                          GstBufferList *buffer_list);
 
 G_END_DECLS

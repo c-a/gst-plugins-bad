@@ -49,13 +49,13 @@ static GstStaticPadTemplate sink_factory = GST_STATIC_PAD_TEMPLATE ("sink",
     GST_DEBUG_CATEGORY_INIT (h264parse_debug, "h264parse", 0, \
     "H264 parser");
 
-GST_BOILERPLATE_FULL (GstH264Parse2, gst_h264_parse2, GstBaseVideoParse,
+GST_BOILERPLATE_FULL (GstH264Parse2, gst_h264_parse2, SatBaseVideoParse,
     GST_TYPE_BASE_VIDEO_PARSE, _do_init);
 
 #define SYNC_CODE_SIZE 3
 
 static gboolean
-gst_h264_parse2_set_sink_caps (GstBaseVideoParse * parse, GstCaps * caps)
+gst_h264_parse2_set_sink_caps (SatBaseVideoParse * parse, GstCaps * caps)
 {
   GstH264Parse2 *h264parse;
   GstStructure *structure;
@@ -99,7 +99,7 @@ gst_h264_parse2_set_sink_caps (GstBaseVideoParse * parse, GstCaps * caps)
 }
 
 static gboolean
-gst_h264_parse2_convert (GstBaseVideoParse * parse, GstFormat src_format,
+gst_h264_parse2_convert (SatBaseVideoParse * parse, GstFormat src_format,
     gint64 src_value, GstFormat dest_format, gint64 * dest_value)
 {
   GstH264Parse2 *h264parse = GST_H264_PARSE2 (parse);
@@ -121,7 +121,7 @@ gst_h264_parse2_convert (GstBaseVideoParse * parse, GstFormat src_format,
 }
 
 static gint
-gst_h264_parse2_scan_for_sync (GstBaseVideoParse * parse, GstAdapter * adapter)
+gst_h264_parse2_scan_for_sync (SatBaseVideoParse * parse, GstAdapter * adapter)
 {
   GstH264Parse2 *h264parse = GST_H264_PARSE2 (parse);
   gint m;
@@ -137,8 +137,8 @@ gst_h264_parse2_scan_for_sync (GstBaseVideoParse * parse, GstAdapter * adapter)
   return m;
 }
 
-static GstBaseVideoParseScanResult
-gst_h264_parse2_scan_for_packet_end (GstBaseVideoParse * parse,
+static SatBaseVideoParseScanResult
+gst_h264_parse2_scan_for_packet_end (SatBaseVideoParse * parse,
     GstAdapter * adapter, guint * size)
 {
   GstH264Parse2 *h264parse = GST_H264_PARSE2 (parse);
@@ -146,7 +146,7 @@ gst_h264_parse2_scan_for_packet_end (GstBaseVideoParse * parse,
 
   avail = gst_adapter_available (adapter);
   if (avail < h264parse->nal_length_size)
-    return GST_BASE_VIDEO_PARSE_SCAN_RESULT_NEED_DATA;
+    return SAT_BASE_VIDEO_PARSE_SCAN_RESULT_NEED_DATA;
 
   if (h264parse->packetized) {
     guint8 *data;
@@ -184,21 +184,21 @@ gst_h264_parse2_scan_for_packet_end (GstBaseVideoParse * parse,
     g_slice_free1 (SYNC_CODE_SIZE, data);
 
     if (start_code != 0x000001)
-      return GST_BASE_VIDEO_PARSE_SCAN_RESULT_LOST_SYNC;
+      return SAT_BASE_VIDEO_PARSE_SCAN_RESULT_LOST_SYNC;
 
     n = gst_adapter_masked_scan_uint32 (adapter, 0xffffff00, 0x00000100,
         SYNC_CODE_SIZE, avail - SYNC_CODE_SIZE);
     if (n == -1)
-      return GST_BASE_VIDEO_PARSE_SCAN_RESULT_NEED_DATA;
+      return SAT_BASE_VIDEO_PARSE_SCAN_RESULT_NEED_DATA;
 
     *size = n;
   }
 
-  return GST_BASE_VIDEO_PARSE_SCAN_RESULT_OK;
+  return SAT_BASE_VIDEO_PARSE_SCAN_RESULT_OK;
 }
 
 static GstFlowReturn
-gst_h264_parse2_parse_data (GstBaseVideoParse * parse, GstBuffer * buffer)
+gst_h264_parse2_parse_data (SatBaseVideoParse * parse, GstBuffer * buffer)
 {
   GstH264Parse2 *h264parse = GST_H264_PARSE2 (parse);
   GstBitReader reader;
@@ -249,7 +249,7 @@ gst_h264_parse2_parse_data (GstBaseVideoParse * parse, GstBuffer * buffer)
     //gst_h264_parse2_handle_slice (h264parse, data, size);
   }
 
-  gst_base_video_parse_frame_add (parse, buffer);
+  sat_base_video_parse_frame_add (parse, buffer);
 
   return GST_FLOW_OK;
 
@@ -260,8 +260,8 @@ invalid_packet:
 }
 
 static GstFlowReturn
-gst_h264_parse2_shape_output (GstBaseVideoParse * parse,
-    GstBaseVideoParseFrame * frame)
+gst_h264_parse2_shape_output (SatBaseVideoParse * parse,
+    SatBaseVideoParseFrame * frame)
 {
   GstH264Parse2 *h264parse = GST_H264_PARSE2 (parse);
   GstBuffer *buf;
@@ -270,7 +270,7 @@ gst_h264_parse2_shape_output (GstBaseVideoParse * parse,
 
   if (frame->is_eos && GST_BUFFER_TIMESTAMP_IS_VALID (buf)) {
     h264parse->final_duration = GST_BUFFER_TIMESTAMP (buf);
-    gst_base_video_parse_set_duration (parse, GST_FORMAT_TIME,
+    sat_base_video_parse_set_duration (parse, GST_FORMAT_TIME,
         h264parse->final_duration);
   }
 
@@ -288,22 +288,22 @@ gst_h264_parse2_shape_output (GstBaseVideoParse * parse,
 
       /* update duration */
       format = GST_FORMAT_BYTES;
-      if (gst_pad_query_duration (GST_BASE_VIDEO_PARSE_SRC_PAD (parse), &format,
+      if (gst_pad_query_duration (SAT_BASE_VIDEO_PARSE_SRC_PAD (parse), &format,
               &byte_duration) && format == GST_FORMAT_BYTES) {
         gint64 duration;
 
         duration = gst_util_uint64_scale (GST_SECOND, byte_duration,
             h264parse->byterate);
-        gst_base_video_parse_set_duration (parse, GST_FORMAT_TIME, duration);
+        sat_base_video_parse_set_duration (parse, GST_FORMAT_TIME, duration);
       }
     }
   }
 
-  return gst_base_video_parse_push (parse, frame->buffer_list);
+  return sat_base_video_parse_push (parse, frame->buffer_list);
 }
 
 static gboolean
-gst_h264_parse2_start (GstBaseVideoParse * parse)
+gst_h264_parse2_start (SatBaseVideoParse * parse)
 {
   GstH264Parse2 *h264parse = GST_H264_PARSE2 (parse);
 
@@ -319,13 +319,13 @@ gst_h264_parse2_start (GstBaseVideoParse * parse)
 }
 
 static gboolean
-gst_h264_parse2_stop (GstBaseVideoParse * parse)
+gst_h264_parse2_stop (SatBaseVideoParse * parse)
 {
   return TRUE;
 }
 
 static void
-gst_h264_parse2_flush (GstBaseVideoParse * parse)
+gst_h264_parse2_flush (SatBaseVideoParse * parse)
 {
 #if 0
   GstH264Parse2 *h264parse = GST_H264_PARSE2 (parse);
@@ -362,7 +362,7 @@ static void
 gst_h264_parse2_class_init (GstH264Parse2Class * klass)
 {
   GObjectClass *gobject_class = G_OBJECT_CLASS (klass);
-  GstBaseVideoParseClass *baseparse_class = GST_BASE_VIDEO_PARSE_CLASS (klass);
+  SatBaseVideoParseClass *baseparse_class = SAT_BASE_VIDEO_PARSE_CLASS (klass);
 
   gobject_class->finalize = gst_h264_parse2_finalize;
 

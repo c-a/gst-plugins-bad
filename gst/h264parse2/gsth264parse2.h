@@ -22,7 +22,7 @@
 #define __GST_H264_PARSE2_H__
 
 #include <gst/gst.h>
-#include "gstbasevideoparse.h"
+#include "satbasevideoparse.h"
 
 G_BEGIN_DECLS
 
@@ -39,7 +39,7 @@ typedef struct _GstH264Parse2Class GstH264Parse2Class;
 
 
 struct _GstH264Parse2 {
-  GstBaseVideoParse parent;
+  SatBaseVideoParse parent;
 
   gboolean packetized;
   guint nal_length_size;
@@ -50,7 +50,7 @@ struct _GstH264Parse2 {
 };
 
 struct _GstH264Parse2Class {
-  GstBaseVideoParseClass parent_class;
+  SatBaseVideoParseClass parent_class;
 };
 
 GType gst_h264_parse2_get_type (void);
