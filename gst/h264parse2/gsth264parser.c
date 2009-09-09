@@ -468,7 +468,7 @@ gst_h264_slice_parse_pred_weight_table (GstH264Slice * slice,
     }
   }
 
-  if (slice->slice_type % 5 == 1) {
+  if (GST_H264_IS_B_SLICE (slice->type)) {
     for (i = 0; i <= pic->num_ref_idx_l1_active_minus1; i++) {
       guint8 luma_weight_l1_flag;
 
@@ -498,7 +498,7 @@ static gboolean
 gst_h264_slice_parse_ref_pic_list_reordering (GstH264Slice * slice,
     GstNalReader * reader)
 {
-  if (slice->slice_type % 5 != 2 && slice->slice_type % 5 != 4) {
+  if (!GST_H264_IS_I_SLICE (slice->type) && !GST_H264_IS_SI_SLICE (slice->type)) {
     guint8 ref_pic_list_reordering_flag_l0;
     guint8 reordering_of_pic_nums_idc;
 
@@ -519,7 +519,7 @@ gst_h264_slice_parse_ref_pic_list_reordering (GstH264Slice * slice,
       } while (reordering_of_pic_nums_idc != 3);
   }
 
-  if (slice->slice_type % 5 == 1) {
+  if (GST_H264_IS_B_SLICE (slice->type)) {
     guint8 ref_pic_list_reordering_flag_l1;
     guint8 reordering_of_pic_nums_idc;
 
@@ -610,7 +610,7 @@ gst_h264_parser_parse_slice_header (GstH264Parser * parser,
   memcpy (&slice->nal_unit, &nal_unit, sizeof (GstNalUnit));
 
   READ_UE (&reader, slice->first_mb_in_slice);
-  READ_UE (&reader, slice->slice_type);
+  READ_UE (&reader, slice->type);
 
   READ_UE (&reader, pic_parameter_set_id);
   pic = g_hash_table_lookup (parser->pictures,
@@ -667,19 +667,18 @@ gst_h264_parser_parse_slice_header (GstH264Parser * parser,
   if (pic->redundant_pic_cnt_present_flag)
     READ_UE (&reader, slice->redundant_pic_cnt);
 
-  if (slice->slice_type == GST_H264_B_SLICE)
+  if (GST_H264_IS_B_SLICE (slice->type))
     READ_UINT8 (&reader, slice->direct_spatial_mv_pred_flag, 1);
 
-  if (slice->slice_type == GST_H264_P_SLICE ||
-      slice->slice_type == GST_H264_SP_SLICE ||
-      slice->slice_type == GST_H264_B_SLICE) {
+  if (GST_H264_IS_P_SLICE (slice->type) ||
+      GST_H264_IS_SP_SLICE (slice->type) || GST_H264_IS_B_SLICE (slice->type)) {
     guint8 num_ref_idx_active_override_flag;
 
     READ_UINT8 (&reader, num_ref_idx_active_override_flag, 1);
     if (num_ref_idx_active_override_flag) {
       READ_UE (&reader, slice->num_ref_idx_l0_active_minus1);
 
-      if (slice->slice_type == GST_H264_B_SLICE)
+      if (GST_H264_IS_B_SLICE (slice->type))
         READ_UE (&reader, slice->num_ref_idx_l1_active_minus1);
     }
   }
@@ -687,10 +686,12 @@ gst_h264_parser_parse_slice_header (GstH264Parser * parser,
   if (!gst_h264_slice_parse_ref_pic_list_reordering (slice, &reader))
     return FALSE;
 
-  if ((pic->weighted_pred_flag && (slice->slice_type % 5 == 0)) ||
-      (pic->weighted_bipred_idc && slice->slice_type == GST_H264_B_SLICE))
+  if ((pic->weighted_pred_flag && (GST_H264_IS_P_SLICE (slice->type) ||
+              GST_H264_IS_SP_SLICE (slice->type)))
+      || (pic->weighted_bipred_idc == 1 && GST_H264_IS_B_SLICE (slice->type))) {
     if (!gst_h264_slice_parse_pred_weight_table (slice, &reader, seq, pic))
       return FALSE;
+  }
 
   if (nal_unit.ref_idc != 0) {
     if (!gst_h264_slice_parse_dec_ref_pic_marking (slice, &reader))
@@ -741,4 +742,13 @@ gst_h264_parser_class_init (GstH264ParserClass * klass)
   GObjectClass *object_class = G_OBJECT_CLASS (klass);
 
   object_class->finalize = gst_h264_parser_finalize;
+}
+
+gboolean
+gst_h264_check_slice_type (GstH264SliceType type, GstH264SliceType check_type)
+{
+  if ((type % 5) == check_type)
+    return TRUE;
+
+  return FALSE;
 }

@@ -56,6 +56,12 @@ typedef enum
   GST_H264_S_SI_SLICE
 } GstH264SliceType;
 
+#define GST_H264_IS_P_SLICE(type)  ((type % 5) == GST_H264_P_SLICE)
+#define GST_H264_IS_B_SLICE(type)  ((type % 5) == GST_H264_B_SLICE)
+#define GST_H264_IS_I_SLICE(type)  ((type % 5) == GST_H264_I_SLICE)
+#define GST_H264_IS_SP_SLICE(type) ((type % 5) == GST_H264_SP_SLICE)
+#define GST_H264_IS_SI_SLICE(type) ((type % 5) == GST_H264_SI_SLICE)
+
 typedef struct _GstNalUnit GstNalUnit;
 typedef struct _GstH264Sequence GstH264Sequence;
 typedef struct _GstH264Picture GstH264Picture;
@@ -199,7 +205,7 @@ struct _GstH264Slice
   GstNalUnit nal_unit;
   
   guint32 first_mb_in_slice;
-  guint32 slice_type;
+  guint32 type;
   
   GstH264Picture *picture;
 
