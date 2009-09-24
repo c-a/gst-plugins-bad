@@ -91,9 +91,30 @@ gst_h264_parse2_set_sink_caps (SatBaseVideoParse * parse, GstCaps * caps)
      * length */
     h264parse->nal_length_size = (data[4] & 0x03) + 1;
     GST_DEBUG_OBJECT (h264parse, "nal length %u", h264parse->nal_length_size);
+
+    h264parse->codec_data = buf;
   }
 
   return TRUE;
+}
+
+static GstCaps *
+gst_h264_parse2_get_base_caps (SatBaseVideoParse * parse)
+{
+  GstH264Parse2 *h264parse = GST_H264_PARSE2 (parse);
+  GstCaps *caps;
+
+  caps = gst_caps_new_simple ("video/x-h264", NULL);
+
+  if (h264parse->codec_data) {
+    GstStructure *structure;
+
+    structure = gst_caps_get_structure (caps, 0);
+    gst_structure_set (structure,
+        "codec_data", GST_TYPE_BUFFER, h264parse->codec_data, NULL);
+  }
+
+  return caps;
 }
 
 static gboolean
@@ -250,6 +271,9 @@ gst_h264_parse2_parse_data (SatBaseVideoParse * parse, GstBuffer * buffer)
     if (!gst_h264_parser_parse_slice_header (h264parse->parser, &slice, data,
             size, nal_unit))
       goto invalid_packet;
+
+    if (GST_H264_IS_I_SLICE (slice.type) || GST_H264_IS_SI_SLICE (slice.type))
+      sat_base_video_parse_frame_set_keyframe (parse);
   }
 
   if (nal_unit.type == GST_NAL_SPS) {
@@ -263,6 +287,7 @@ gst_h264_parse2_parse_data (SatBaseVideoParse * parse, GstBuffer * buffer)
   }
 
   sat_base_video_parse_frame_add (parse, buffer);
+  sat_base_video_parse_frame_finish (parse);
 
   return GST_FLOW_OK;
 
@@ -320,6 +345,7 @@ gst_h264_parse2_start (SatBaseVideoParse * parse)
 {
   GstH264Parse2 *h264parse = GST_H264_PARSE2 (parse);
 
+  h264parse->codec_data = NULL;
   h264parse->packetized = FALSE;
   h264parse->nal_length_size = SYNC_CODE_SIZE;
   h264parse->parser = g_object_new (GST_TYPE_H264_PARSER, NULL);
@@ -399,6 +425,8 @@ gst_h264_parse2_class_init (GstH264Parse2Class * klass)
 
   baseparse_class->set_sink_caps =
       GST_DEBUG_FUNCPTR (gst_h264_parse2_set_sink_caps);
+  baseparse_class->get_base_caps =
+      GST_DEBUG_FUNCPTR (gst_h264_parse2_get_base_caps);
 
   baseparse_class->convert = GST_DEBUG_FUNCPTR (gst_h264_parse2_convert);
 }

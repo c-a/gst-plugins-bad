@@ -44,6 +44,7 @@ typedef struct _GstH264Parse2Class GstH264Parse2Class;
 struct _GstH264Parse2 {
   SatBaseVideoParse parent;
 
+  GstBuffer *codec_data;
   gboolean packetized;
   guint nal_length_size;
   GstH264Parser *parser;
