@@ -157,7 +157,7 @@ gst_nal_reader_skip (GstNalReader * reader, guint nbits)
 {
   g_return_val_if_fail (reader != NULL, FALSE);
 
-  if (!gst_nal_reader_read (reader, nbits))
+  if (G_UNLIKELY (!gst_nal_reader_read (reader, nbits)))
     return FALSE;
 
   reader->bits_in_cache -= nbits;
@@ -181,7 +181,7 @@ gst_nal_reader_skip_to_byte (GstNalReader * reader)
   g_return_val_if_fail (reader != NULL, FALSE);
 
   if (reader->bits_in_cache == 0) {
-    if ((reader->size - reader->byte) > 0)
+    if (G_LIKELY ((reader->size - reader->byte) > 0))
       reader->byte++;
     else
       return FALSE;
@@ -314,7 +314,8 @@ gst_nal_reader_get_remaining (const GstNalReader * reader)
 static gboolean
 gst_nal_reader_read (GstNalReader * reader, guint nbits)
 {
-  if (reader->byte * 8 + (nbits - reader->bits_in_cache) > reader->size * 8)
+  if (G_UNLIKELY (reader->byte * 8 + (nbits - reader->bits_in_cache) >
+          reader->size * 8))
     return FALSE;
 
   while (reader->bits_in_cache < nbits) {
@@ -323,7 +324,7 @@ gst_nal_reader_read (GstNalReader * reader, guint nbits)
 
     check_three_byte = TRUE;
   next_byte:
-    if (reader->byte >= reader->size)
+    if (G_UNLIKELY (reader->byte >= reader->size))
       return FALSE;
 
     byte = reader->data[reader->byte++];
@@ -401,19 +402,19 @@ gst_nal_reader_get_ue (GstNalReader * reader, guint32 * val)
   guint8 byte;
   guint32 value;
 
-  if (!gst_nal_reader_get_bits_uint8 (reader, &byte, 1))
+  if (G_UNLIKELY (!gst_nal_reader_get_bits_uint8 (reader, &byte, 1)))
     return FALSE;
 
   while (byte == 0) {
     i++;
-    if (!gst_nal_reader_get_bits_uint8 (reader, &byte, 1))
-      return FALSE;
+    if G_UNLIKELY
+      ((!gst_nal_reader_get_bits_uint8 (reader, &byte, 1)))
+          return FALSE;
   }
 
-  if (i > 32)
-    return FALSE;
+  g_return_val_if_fail (i <= 32, FALSE);
 
-  if (!gst_nal_reader_get_bits_uint32 (reader, &value, i))
+  if (G_UNLIKELY (!gst_nal_reader_get_bits_uint32 (reader, &value, i)))
     return FALSE;
 
   *val = (1 << i) - 1 + value;
@@ -455,7 +456,7 @@ gst_nal_reader_get_se (GstNalReader * reader, gint32 * val)
 {
   guint32 value;
 
-  if (!gst_nal_reader_get_ue (reader, &value))
+  if (G_UNLIKELY (!gst_nal_reader_get_ue (reader, &value)))
     return FALSE;
 
   if (value % 2)
