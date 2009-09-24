@@ -1249,12 +1249,21 @@ sat_base_video_parse_update_src_caps (SatBaseVideoParse * parse)
     return FALSE;
 
   state = parse->state;
+  if (state.width != 0 && state.height != 0)
+    gst_caps_set_simple (caps,
+        "width", G_TYPE_INT, state.width,
+        "height", G_TYPE_INT, state.height, NULL);
+  if (state.fps_n != 0 && state.fps_d != 0)
+    gst_caps_set_simple (caps,
+        "framerate", GST_TYPE_FRACTION, state.fps_n, state.fps_d, NULL);
+
+  if (state.par_n != 0 && state.par_d != 0)
+    gst_caps_set_simple (caps,
+        "pixel-aspect-ratio", GST_TYPE_FRACTION, state.par_n, state.par_d,
+        NULL);
+
   gst_caps_set_simple (caps,
       "parsed", G_TYPE_BOOLEAN, TRUE,
-      "width", G_TYPE_INT, state.width,
-      "height", G_TYPE_INT, state.height,
-      "framerate", GST_TYPE_FRACTION, state.fps_n, state.fps_d,
-      "pixel-aspect-ratio", GST_TYPE_FRACTION, state.par_n, state.par_d,
       "interlaced", G_TYPE_BOOLEAN, state.interlaced, NULL);
 
   if (!gst_caps_is_equal (caps, GST_PAD_CAPS (parse->srcpad))) {
