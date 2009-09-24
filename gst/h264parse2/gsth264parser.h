@@ -72,8 +72,8 @@ typedef struct _GstH264Slice GstH264Slice;
 
 struct _GstNalUnit
 {
-  guint8 ref_idc;
-  guint8 type;
+  guint16 ref_idc;
+  guint16 type;
 
   /* calculated values */
   guint8 IdrPicFlag;
@@ -81,7 +81,7 @@ struct _GstNalUnit
 
 struct _GstH264Sequence
 {
-  guint32 id;
+  gint id;
 
   guint8 profile_idc;
   guint8 constraint_set0_flag;
@@ -90,10 +90,10 @@ struct _GstH264Sequence
   guint8 constraint_set3_flag;
   guint8 level_idc;
 
-  guint32 chroma_format_idc;
+  guint8 chroma_format_idc;
   guint8 separate_colour_plane_flag;
-  guint32 bit_depth_luma_minus8;
-  guint32 bit_depth_chroma_minus8;
+  guint8 bit_depth_luma_minus8;
+  guint8 bit_depth_chroma_minus8;
   guint8 qpprime_y_zero_transform_bypass_flag;
 
   guint8 scaling_matrix_present_flag;
@@ -101,10 +101,10 @@ struct _GstH264Sequence
   guint8 scaling_lists_8x8[6][64];
 
   guint8 log2_max_frame_num_minus4;
-  guint32 pic_order_cnt_type;
+  guint8 pic_order_cnt_type;
 
   /* if pic_order_cnt_type == 0 */
-  guint32 log2_max_pic_order_cnt_lsb_minus4;
+  guint8 log2_max_pic_order_cnt_lsb_minus4;
 
   /* else if pic_order_cnt_type == 1 */
   guint8 delta_pic_order_always_zero_flag;
@@ -126,7 +126,7 @@ struct _GstH264Sequence
 
 struct _GstH264Picture
 {
-  guint32 id;
+  gint id;
 
   GstH264Sequence *sequence;
 
@@ -136,7 +136,7 @@ struct _GstH264Picture
   guint32 num_slice_groups_minus1;
 
   /* if num_slice_groups_minus1 > 0 */
-  guint32 slice_group_map_type;
+  guint8 slice_group_map_type;
   /* and if slice_group_map_type == 0 */
   guint32 run_length_minus1[8];
   /* or if slice_group_map_type == 2 */
@@ -218,7 +218,7 @@ struct _GstH264Slice
   guint8 bottom_field_flag;
 
   /* if nal_unit.type == 5 */
-  guint32 idr_pic_id;
+  guint16 idr_pic_id;
 
   /* if seq->pic_order_cnt_type == 0 */
   guint16 pic_order_cnt_lsb;
@@ -226,13 +226,13 @@ struct _GstH264Slice
   gint32 delta_pic_order_cnt_bottom;
 
   gint32 delta_pic_order_cnt[2];
-  guint32 redundant_pic_cnt;
+  guint8 redundant_pic_cnt;
 
   /* if slice_type == B_SLICE */
   guint8 direct_spatial_mv_pred_flag;
 
-  guint32 num_ref_idx_l0_active_minus1;
-  guint32 num_ref_idx_l1_active_minus1;
+  guint8 num_ref_idx_l0_active_minus1;
+  guint8 num_ref_idx_l1_active_minus1;
 
   GstH264PredWeightTable pred_weight_table;
   /* if nal_unit.ref_idc != 0 */
@@ -266,6 +266,10 @@ struct _GstH264Parser
 };
 		
 GType gst_h264_parser_get_type (void) G_GNUC_CONST;
+
+GstH264Sequence *gst_h264_parser_parse_sequence (GstH264Parser * parser, guint8 * data, guint size);
+GstH264Picture *gst_h264_parser_parse_picture (GstH264Parser * parser, guint8 * data, guint size);
+gboolean gst_h264_parser_parse_slice_header (GstH264Parser * parser, GstH264Slice * slice, guint8 * data, guint size, GstNalUnit nal_unit);
 
 G_END_DECLS
 

@@ -52,33 +52,46 @@ const guint8 default_8x8_inter[64] =
 
 
 #define CHECK_ALLOWED(val, min, max) { \
-  if (val < min || val > max) \
+  if (val < min || val > max) { \
+    GST_WARNING ("value not in allowed range. value: %d, range %d-%d", \
+                     val, min, max); \
     goto error; \
+  } \
 }
 
 #define READ_UINT8(reader, val, nbits) { \
-  if (!gst_nal_reader_get_bits_uint8 (reader, &val, nbits)) \
+  if (!gst_nal_reader_get_bits_uint8 (reader, &val, nbits)) { \
+    GST_WARNING ("failed to read uint8, nbits: %d", nbits); \
     goto error; \
+  } \
 }
 
 #define READ_UINT16(reader, val, nbits) { \
-  if (!gst_nal_reader_get_bits_uint16 (reader, &val, nbits)) \
+  if (!gst_nal_reader_get_bits_uint16 (reader, &val, nbits)) { \
+  GST_WARNING ("failed to read uint16, nbits: %d", nbits); \
     goto error; \
+  } \
 }
 
 #define READ_UINT32(reader, val, nbits) { \
-  if (!gst_nal_reader_get_bits_uint32 (reader, &val, nbits)) \
+  if (!gst_nal_reader_get_bits_uint32 (reader, &val, nbits)) { \
+  GST_WARNING ("failed to read uint32, nbits: %d", nbits); \
     goto error; \
+  } \
 }
 
 #define READ_UINT64(reader, val, nbits) { \
-  if (!gst_nal_reader_get_bits_uint64 (reader, &val, nbits)) \
+  if (!gst_nal_reader_get_bits_uint64 (reader, &val, nbits)) { \
+    GST_WARNING ("failed to read uint32, nbits: %d", nbits); \
     goto error; \
+  } \
 }
 
 #define READ_UE(reader, val) { \
-  if (!gst_nal_reader_get_ue (reader, &val)) \
+  if (!gst_nal_reader_get_ue (reader, &val)) { \
+    GST_WARNING ("failed to read UE"); \
     goto error; \
+  } \
 }
 
 #define READ_UE_ALLOWED(reader, val, min, max) { \
@@ -89,8 +102,10 @@ const guint8 default_8x8_inter[64] =
 }
 
 #define READ_SE(reader, val) { \
-  if (!gst_nal_reader_get_se (reader, &val)) \
+  if (!gst_nal_reader_get_se (reader, &val)) { \
+    GST_WARNING ("failed to read SE"); \
     goto error; \
+  } \
 }
 
 #define READ_SE_ALLOWED(reader, val, min, max) { \
@@ -100,7 +115,15 @@ const guint8 default_8x8_inter[64] =
   val = tmp; \
 }
 
-G_DEFINE_TYPE (GstH264Parser, gst_h264_parser, G_TYPE_OBJECT);
+GST_DEBUG_CATEGORY_STATIC (h264parser_debug);
+#define GST_CAT_DEFAULT h264parser_debug
+
+#define _do_init \
+    GST_DEBUG_CATEGORY_INIT (h264parser_debug, "h264parser", 0, \
+    "H264 parser");
+
+G_DEFINE_TYPE_WITH_CODE (GstH264Parser, gst_h264_parser, G_TYPE_OBJECT,
+    _do_init);
 
 static void
 gst_h264_sequence_free (void *data)
@@ -117,6 +140,8 @@ gst_h264_parser_parse_scaling_list (GstNalReader * reader,
 {
   gint i;
   guint8 seq_scaling_list_present_flag[12] = { 0, };
+
+  GST_WARNING ("parsing scaling lists");
 
   for (i = 0; i < ((chroma_format_idc) != 3) ? 8 : 12; i++) {
     READ_UINT8 (reader, seq_scaling_list_present_flag[i], 1);
@@ -200,7 +225,11 @@ gst_h264_parser_parse_scaling_list (GstNalReader * reader,
     }
   }
 
+  return TRUE;
+
 error:
+
+  GST_WARNING ("error parsing scaling lists");
   return FALSE;
 }
 
@@ -214,6 +243,8 @@ gst_h264_parser_parse_sequence (GstH264Parser * parser, guint8 * data,
   g_return_val_if_fail (GST_IS_H264_PARSER (parser), NULL);
   g_return_val_if_fail (data != NULL, NULL);
   g_return_val_if_fail (size > 0, NULL);
+
+  GST_DEBUG ("parsing \"Sequence parameter set\"");
 
   seq = g_slice_new (GstH264Sequence);
 
@@ -238,7 +269,7 @@ gst_h264_parser_parse_sequence (GstH264Parser * parser, guint8 * data,
 
   READ_UINT8 (&reader, seq->level_idc, 8);
 
-  READ_UE (&reader, seq->id);
+  READ_UE_ALLOWED (&reader, seq->id, 0, 31);
 
   if (seq->profile_idc == 100 || seq->profile_idc == 110 ||
       seq->profile_idc == 122 || seq->profile_idc == 244 ||
@@ -248,8 +279,8 @@ gst_h264_parser_parse_sequence (GstH264Parser * parser, guint8 * data,
     if (seq->chroma_format_idc == 3)
       READ_UINT8 (&reader, seq->separate_colour_plane_flag, 1);
 
-    READ_UE (&reader, seq->bit_depth_luma_minus8);
-    READ_UE (&reader, seq->bit_depth_chroma_minus8);
+    READ_UE_ALLOWED (&reader, seq->bit_depth_luma_minus8, 0, 6);
+    READ_UE_ALLOWED (&reader, seq->bit_depth_chroma_minus8, 0, 6);
     READ_UINT8 (&reader, seq->qpprime_y_zero_transform_bypass_flag, 1);
 
     READ_UINT8 (&reader, seq->scaling_matrix_present_flag, 1);
@@ -266,9 +297,9 @@ gst_h264_parser_parse_sequence (GstH264Parser * parser, guint8 * data,
   /* calculate MaxFrameNum */
   seq->MaxFrameNum = pow (2, seq->log2_max_frame_num_minus4 + 4);
 
-  READ_UE (&reader, seq->pic_order_cnt_type);
+  READ_UE_ALLOWED (&reader, seq->pic_order_cnt_type, 0, 2);
   if (seq->pic_order_cnt_type == 0) {
-    READ_UE (&reader, seq->log2_max_pic_order_cnt_lsb_minus4);
+    READ_UE_ALLOWED (&reader, seq->log2_max_pic_order_cnt_lsb_minus4, 0, 12);
   } else if (seq->pic_order_cnt_type == 1) {
     guint i;
 
@@ -286,9 +317,14 @@ gst_h264_parser_parse_sequence (GstH264Parser * parser, guint8 * data,
   READ_UE (&reader, seq->pic_height_in_map_units_minus1);
   READ_UINT8 (&reader, seq->frame_mbs_only_flag, 1);
 
-  g_hash_table_insert (parser->sequences, GUINT_TO_POINTER (seq->id), seq);
+  GST_DEBUG ("adding sequence parameter set with id: %d to hash table",
+      seq->id);
+  g_hash_table_replace (parser->sequences, &seq->id, seq);
+  return seq;
 
 error:
+  GST_WARNING ("error parsing \"Sequence parameter set\"");
+
   gst_h264_sequence_free (seq);
   return NULL;
 }
@@ -329,12 +365,14 @@ gst_h264_parser_parse_picture (GstH264Parser * parser, guint8 * data,
 {
   GstNalReader reader = GST_NAL_READER_INIT (data, size);
   GstH264Picture *pic;
-  guint32 seq_parameter_set_id;
+  gint seq_parameter_set_id;
   GstH264Sequence *seq;
 
   g_return_val_if_fail (GST_IS_H264_PARSER (parser), NULL);
   g_return_val_if_fail (data != NULL, NULL);
   g_return_val_if_fail (size > 0, NULL);
+
+  GST_DEBUG ("parsing \"Picture parameter set\"");
 
   pic = g_slice_new (GstH264Picture);
 
@@ -343,20 +381,20 @@ gst_h264_parser_parse_picture (GstH264Parser * parser, guint8 * data,
   pic->slice_group_id = NULL;
   pic->transform_8x8_mode_flag = 0;
 
-  READ_UE (&reader, pic->id);
-  READ_UE (&reader, seq_parameter_set_id);
-  seq =
-      g_hash_table_lookup (parser->sequences,
-      GINT_TO_POINTER (seq_parameter_set_id));
-  if (!seq)
+  READ_UE_ALLOWED (&reader, pic->id, 0, 255);
+  READ_UE_ALLOWED (&reader, seq_parameter_set_id, 0, 31);
+  seq = g_hash_table_lookup (parser->sequences, &seq_parameter_set_id);
+  if (!seq) {
+    GST_WARNING ("Couldn't find associated sequence parameter set");
     goto error;
+  }
   pic->sequence = seq;
 
   READ_UINT8 (&reader, pic->entropy_coding_mode_flag, 1);
   READ_UINT8 (&reader, pic->pic_order_present_flag, 1);
   READ_UE_ALLOWED (&reader, pic->num_slice_groups_minus1, 0, 7);
   if (pic->num_slice_groups_minus1 > 0) {
-    READ_UE (&reader, pic->slice_group_map_type);
+    READ_UE_ALLOWED (&reader, pic->slice_group_map_type, 0, 6);
     if (pic->slice_group_map_type == 0) {
       gint i;
 
@@ -421,7 +459,13 @@ gst_h264_parser_parse_picture (GstH264Parser * parser, guint8 * data,
 
   READ_SE_ALLOWED (&reader, pic->second_chroma_qp_index_offset, -12, 12);
 
+  GST_DEBUG ("adding picture parameter set with id: %d to hash table", pic->id);
+  g_hash_table_replace (parser->pictures, &pic->id, pic);
+  return pic;
+
 error:
+  GST_WARNING ("error parsing \"Picture parameter set\"");
+
   gst_h264_picture_free (pic);
   return NULL;
 }
@@ -433,6 +477,8 @@ gst_h264_slice_parse_pred_weight_table (GstH264Slice * slice,
 {
   GstH264PredWeightTable *p;
   gint i;
+
+  GST_DEBUG ("parsing \"Prediction weight table\"");
 
   p = &slice->pred_weight_table;
 
@@ -490,7 +536,10 @@ gst_h264_slice_parse_pred_weight_table (GstH264Slice * slice,
     }
   }
 
+  return TRUE;
+
 error:
+  GST_WARNING ("error parsing \"Prediction weight table\"");
   return FALSE;
 }
 
@@ -498,6 +547,8 @@ static gboolean
 gst_h264_slice_parse_ref_pic_list_reordering (GstH264Slice * slice,
     GstNalReader * reader)
 {
+  GST_DEBUG ("parsing \"Reference picture list reordering\"");
+
   if (!GST_H264_IS_I_SLICE (slice->type) && !GST_H264_IS_SI_SLICE (slice->type)) {
     guint8 ref_pic_list_reordering_flag_l0;
     guint8 reordering_of_pic_nums_idc;
@@ -538,7 +589,10 @@ gst_h264_slice_parse_ref_pic_list_reordering (GstH264Slice * slice,
       } while (reordering_of_pic_nums_idc != 3);
   }
 
+  return TRUE;
+
 error:
+  GST_WARNING ("error parsing \"Reference picture list reordering\"");
   return FALSE;
 }
 
@@ -547,6 +601,8 @@ gst_h264_slice_parse_dec_ref_pic_marking (GstH264Slice * slice,
     GstNalReader * reader)
 {
   GstH264DecRefPicMarking *m;
+
+  GST_DEBUG ("parsing \"Decoded reference picture marking\"");
 
   m = &slice->dec_ref_pic_marking;
 
@@ -590,6 +646,7 @@ gst_h264_slice_parse_dec_ref_pic_marking (GstH264Slice * slice,
   return TRUE;
 
 error:
+  GST_WARNING ("error parsing \"Decoded reference picture marking\"");
   return FALSE;
 }
 
@@ -598,7 +655,7 @@ gst_h264_parser_parse_slice_header (GstH264Parser * parser,
     GstH264Slice * slice, guint8 * data, guint size, GstNalUnit nal_unit)
 {
   GstNalReader reader = GST_NAL_READER_INIT (data, size);
-  guint32 pic_parameter_set_id;
+  gint pic_parameter_set_id;
   GstH264Picture *pic;
   GstH264Sequence *seq;
 
@@ -607,16 +664,19 @@ gst_h264_parser_parse_slice_header (GstH264Parser * parser,
   g_return_val_if_fail (data != NULL, FALSE);
   g_return_val_if_fail (size > 0, FALSE);
 
+  GST_DEBUG ("parsing \"Slice header\"");
+
   memcpy (&slice->nal_unit, &nal_unit, sizeof (GstNalUnit));
 
   READ_UE (&reader, slice->first_mb_in_slice);
   READ_UE (&reader, slice->type);
 
-  READ_UE (&reader, pic_parameter_set_id);
-  pic = g_hash_table_lookup (parser->pictures,
-      GINT_TO_POINTER (pic_parameter_set_id));
-  if (!pic)
+  READ_UE_ALLOWED (&reader, pic_parameter_set_id, 0, 255);
+  pic = g_hash_table_lookup (parser->pictures, &pic_parameter_set_id);
+  if (!pic) {
+    GST_WARNING ("couldn't find associated picture parameter set");
     goto error;
+  }
   slice->picture = pic;
   seq = pic->sequence;
 
@@ -649,7 +709,7 @@ gst_h264_parser_parse_slice_header (GstH264Parser * parser,
     slice->MaxPicNum = 2 * seq->MaxFrameNum;
 
   if (nal_unit.type == 5)
-    READ_UE (&reader, slice->idr_pic_id);
+    READ_UE_ALLOWED (&reader, slice->idr_pic_id, 0, 65535);
 
   if (seq->pic_order_cnt_type == 0) {
     READ_UINT16 (&reader, slice->pic_order_cnt_lsb,
@@ -665,7 +725,7 @@ gst_h264_parser_parse_slice_header (GstH264Parser * parser,
   }
 
   if (pic->redundant_pic_cnt_present_flag)
-    READ_UE (&reader, slice->redundant_pic_cnt);
+    READ_UE_ALLOWED (&reader, slice->redundant_pic_cnt, 0, 127);
 
   if (GST_H264_IS_B_SLICE (slice->type))
     READ_UINT8 (&reader, slice->direct_spatial_mv_pred_flag, 1);
@@ -676,10 +736,10 @@ gst_h264_parser_parse_slice_header (GstH264Parser * parser,
 
     READ_UINT8 (&reader, num_ref_idx_active_override_flag, 1);
     if (num_ref_idx_active_override_flag) {
-      READ_UE (&reader, slice->num_ref_idx_l0_active_minus1);
+      READ_UE_ALLOWED (&reader, slice->num_ref_idx_l0_active_minus1, 0, 31);
 
       if (GST_H264_IS_B_SLICE (slice->type))
-        READ_UE (&reader, slice->num_ref_idx_l1_active_minus1);
+        READ_UE_ALLOWED (&reader, slice->num_ref_idx_l1_active_minus1, 0, 31);
     }
   }
 
@@ -701,6 +761,7 @@ gst_h264_parser_parse_slice_header (GstH264Parser * parser,
   return TRUE;
 
 error:
+  GST_WARNING ("error parsing \"Slice header\"");
   return FALSE;
 }
 

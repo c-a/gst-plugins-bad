@@ -26,12 +26,10 @@
 #include <gst/base/gstbitreader.h>
 #include <string.h>
 
-#include "gsth264parser.h"
-
 #include "gsth264parse2.h"
 
-GST_DEBUG_CATEGORY_STATIC (h264parse_debug);
-#define GST_CAT_DEFAULT h264parse_debug
+GST_DEBUG_CATEGORY_STATIC (h264parse2_debug);
+#define GST_CAT_DEFAULT h264parse2_debug
 
 static GstStaticPadTemplate src_factory = GST_STATIC_PAD_TEMPLATE ("src",
     GST_PAD_SRC,
@@ -46,7 +44,7 @@ static GstStaticPadTemplate sink_factory = GST_STATIC_PAD_TEMPLATE ("sink",
     );
 
 #define _do_init(bla) \
-    GST_DEBUG_CATEGORY_INIT (h264parse_debug, "h264parse", 0, \
+    GST_DEBUG_CATEGORY_INIT (h264parse2_debug, "h264parse2", 0, \
     "H264 parser");
 
 GST_BOILERPLATE_FULL (GstH264Parse2, gst_h264_parse2, SatBaseVideoParse,
@@ -166,8 +164,7 @@ gst_h264_parse2_scan_for_packet_end (SatBaseVideoParse * parse,
      * when something is fishy */
     if (nal_length <= 1 || nal_length > avail) {
       nal_length = avail - h264parse->nal_length_size;
-      GST_DEBUG_OBJECT (h264parse, "fixing invalid NALU size to %u",
-          nal_length);
+      GST_DEBUG ("fixing invalid NALU size to %u", nal_length);
     }
 
     *size = nal_length;
@@ -183,7 +180,8 @@ gst_h264_parse2_scan_for_packet_end (SatBaseVideoParse * parse,
     start_code = ((data[0] << 16) && (data[1] << 8) && data[2]);
     g_slice_free1 (SYNC_CODE_SIZE, data);
 
-    if (start_code != 0x000001)
+    GST_DEBUG ("start_code: %d", start_code);
+    if (start_code == 0x000001)
       return SAT_BASE_VIDEO_PARSE_SCAN_RESULT_LOST_SYNC;
 
     n = gst_adapter_masked_scan_uint32 (adapter, 0xffffff00, 0x00000100,
@@ -194,6 +192,8 @@ gst_h264_parse2_scan_for_packet_end (SatBaseVideoParse * parse,
     *size = n;
   }
 
+  GST_DEBUG ("NAL size: %d", *size);
+
   return SAT_BASE_VIDEO_PARSE_SCAN_RESULT_OK;
 }
 
@@ -202,9 +202,8 @@ gst_h264_parse2_parse_data (SatBaseVideoParse * parse, GstBuffer * buffer)
 {
   GstH264Parse2 *h264parse = GST_H264_PARSE2 (parse);
   GstBitReader reader;
-  guint16 forbidden_zero_bit;
-  guint16 nal_ref_idc;
-  guint16 nal_unit_type;
+  GstNalUnit nal_unit;
+  guint8 forbidden_zero_bit;
 
   guint8 *data;
   guint size;
@@ -215,38 +214,52 @@ gst_h264_parse2_parse_data (SatBaseVideoParse * parse, GstBuffer * buffer)
   /* skip nal_length or sync code */
   gst_bit_reader_skip (&reader, h264parse->nal_length_size * 8);
 
-  if (!gst_bit_reader_get_bits_uint16 (&reader, &forbidden_zero_bit, 1))
+  if (!gst_bit_reader_get_bits_uint8 (&reader, &forbidden_zero_bit, 1))
     goto invalid_packet;
   if (forbidden_zero_bit != 0) {
     GST_WARNING ("forbidden_zero_bit != 0");
     return GST_FLOW_ERROR;
   }
 
-  if (!gst_bit_reader_get_bits_uint16 (&reader, &nal_ref_idc, 2))
+  if (!gst_bit_reader_get_bits_uint16 (&reader, &nal_unit.ref_idc, 2))
     goto invalid_packet;
-  GST_DEBUG ("nal_ref_idc: %u", nal_ref_idc);
+  GST_DEBUG ("nal_ref_idc: %u", nal_unit.ref_idc);
 
   /* read nal_unit_type */
-  if (!gst_bit_reader_get_bits_uint16 (&reader, &nal_unit_type, 5))
+  if (!gst_bit_reader_get_bits_uint16 (&reader, &nal_unit.type, 5))
     goto invalid_packet;
 
-  GST_DEBUG ("nal_unit_type: %u", nal_unit_type);
-  if (nal_unit_type == 14 || nal_unit_type == 20) {
+  GST_DEBUG ("nal_unit_type: %u", nal_unit.type);
+  if (nal_unit.type == 14 || nal_unit.type == 20) {
     if (!gst_bit_reader_skip (&reader, 24))
       goto invalid_packet;
   }
 
   data = GST_BUFFER_DATA (buffer) + gst_bit_reader_get_pos (&reader) / 8;
-  size = gst_bit_reader_get_remaining (&reader) * 8;
+  size = gst_bit_reader_get_remaining (&reader) / 8;
 
   i = size - 1;
   while (size >= 0 && data[i] == 0x00) {
-    g_debug ("skipping");
     size--;
+    i--;
   }
 
-  if (nal_unit_type >= GST_NAL_SLICE && nal_unit_type <= GST_NAL_SLICE_IDR) {
-    //gst_h264_parse2_handle_slice (h264parse, data, size);
+  if (nal_unit.type >= GST_NAL_SLICE && nal_unit.type <= GST_NAL_SLICE_IDR) {
+    GstH264Slice slice;
+
+    if (!gst_h264_parser_parse_slice_header (h264parse->parser, &slice, data,
+            size, nal_unit))
+      goto invalid_packet;
+  }
+
+  if (nal_unit.type == GST_NAL_SPS) {
+    if (!gst_h264_parser_parse_sequence (h264parse->parser, data, size))
+      goto invalid_packet;
+  }
+
+  if (nal_unit.type == GST_NAL_PPS) {
+    if (!gst_h264_parser_parse_picture (h264parse->parser, data, size))
+      goto invalid_packet;
   }
 
   sat_base_video_parse_frame_add (parse, buffer);
@@ -256,7 +269,7 @@ gst_h264_parse2_parse_data (SatBaseVideoParse * parse, GstBuffer * buffer)
 invalid_packet:
   GST_WARNING ("Invalid packet size!");
 
-  return GST_FLOW_ERROR;
+  return GST_FLOW_OK;
 }
 
 static GstFlowReturn
@@ -309,6 +322,7 @@ gst_h264_parse2_start (SatBaseVideoParse * parse)
 
   h264parse->packetized = FALSE;
   h264parse->nal_length_size = SYNC_CODE_SIZE;
+  h264parse->parser = g_object_new (GST_TYPE_H264_PARSER, NULL);
 
   h264parse->byterate = -1;
   h264parse->byte_offset = 0;
@@ -321,6 +335,10 @@ gst_h264_parse2_start (SatBaseVideoParse * parse)
 static gboolean
 gst_h264_parse2_stop (SatBaseVideoParse * parse)
 {
+  GstH264Parse2 *h264parse = GST_H264_PARSE2 (parse);
+
+  g_object_unref (h264parse->parser);
+
   return TRUE;
 }
 
