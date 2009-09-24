@@ -275,9 +275,11 @@ sat_base_video_parse_frame_finish (SatBaseVideoParse * parse)
     GstBufferListIterator *it;
     frame = parse->current_frame;
 
-    if (!GST_CLOCK_TIME_IS_VALID (frame->presentation_duration)) {
-      frame->presentation_duration = gst_util_uint64_scale (GST_SECOND,
-          parse->state.fps_d, parse->state.fps_n);
+    if (parse->state.fps_n != 0
+        && !GST_CLOCK_TIME_IS_VALID (frame->presentation_duration)) {
+      frame->presentation_duration =
+          gst_util_uint64_scale (GST_SECOND, parse->state.fps_d,
+          parse->state.fps_n);
     }
 
     if (GST_CLOCK_TIME_IS_VALID (frame->upstream_timestamp))
@@ -927,6 +929,9 @@ static GstClockTime
 sat_base_video_parse_get_timestamp (SatBaseVideoParse * parse,
     gint64 picture_number)
 {
+  if (parse->state.fps_n == 0)
+    return GST_CLOCK_TIME_NONE;
+
   if (picture_number < 0) {
     return parse->timestamp_offset -
         (gint64) gst_util_uint64_scale (-picture_number,
