@@ -239,6 +239,7 @@ gst_h264_parser_parse_sequence (GstH264Parser * parser, guint8 * data,
 {
   GstNalReader reader = GST_NAL_READER_INIT (data, size);
   GstH264Sequence *seq;
+  guint8 frame_cropping_flag;
 
   g_return_val_if_fail (GST_IS_H264_PARSER (parser), NULL);
   g_return_val_if_fail (data != NULL, NULL);
@@ -256,6 +257,10 @@ gst_h264_parser_parse_sequence (GstH264Parser * parser, guint8 * data,
   seq->bit_depth_chroma_minus8 = 0;
   memset (seq->scaling_lists_4x4, 16, 96);
   memset (seq->scaling_lists_8x8, 16, 384);
+  seq->frame_crop_left_offset = 0;
+  seq->frame_crop_right_offset = 0;
+  seq->frame_crop_top_offset = 0;
+  seq->frame_crop_bottom_offset = 0;
 
   READ_UINT8 (&reader, seq->profile_idc, 8);
   READ_UINT8 (&reader, seq->constraint_set0_flag, 1);
@@ -316,6 +321,18 @@ gst_h264_parser_parse_sequence (GstH264Parser * parser, guint8 * data,
   READ_UE (&reader, seq->pic_width_in_mbs_minus1);
   READ_UE (&reader, seq->pic_height_in_map_units_minus1);
   READ_UINT8 (&reader, seq->frame_mbs_only_flag, 1);
+
+  if (!seq->frame_mbs_only_flag)
+    READ_UINT8 (&reader, seq->mb_adaptive_frame_field_flag, 1);
+
+  READ_UINT8 (&reader, seq->direct_8x8_inference_flag, 1);
+  READ_UINT8 (&reader, frame_cropping_flag, 1);
+  if (frame_cropping_flag) {
+    READ_UE (&reader, seq->frame_crop_left_offset);
+    READ_UE (&reader, seq->frame_crop_right_offset);
+    READ_UE (&reader, seq->frame_crop_top_offset);
+    READ_UE (&reader, seq->frame_crop_bottom_offset);
+  }
 
   GST_DEBUG ("adding sequence parameter set with id: %d to hash table",
       seq->id);

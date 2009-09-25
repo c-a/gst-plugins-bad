@@ -119,6 +119,16 @@ struct _GstH264Sequence
   guint32 pic_height_in_map_units_minus1;
   guint8 frame_mbs_only_flag;
 
+  /* if !frame_mbs_only_flag */
+  guint8 mb_adaptive_frame_field_flag;
+
+  guint8 direct_8x8_inference_flag;
+
+  guint32 frame_crop_left_offset;
+  guint32 frame_crop_right_offset;
+  guint32 frame_crop_top_offset;
+  guint32 frame_crop_bottom_offset;
+
   /* calculated values */
   guint8 ChromaArrayType;
   guint32 MaxFrameNum;
