@@ -346,7 +346,10 @@ gst_h264_parser_more_data (GstNalReader * reader)
   guint remaining;
 
   remaining = gst_nal_reader_get_remaining (reader);
-  if (remaining > 0 && remaining < 8) {
+  if (remaining == 0)
+    return FALSE;
+
+  if (remaining <= 8) {
     guint8 rbsp_stop_one_bit;
 
     if (!gst_nal_reader_peek_bits_uint8 (reader, &rbsp_stop_one_bit, 1))
@@ -385,7 +388,8 @@ gst_h264_parser_parse_picture (GstH264Parser * parser, guint8 * data,
   READ_UE_ALLOWED (&reader, seq_parameter_set_id, 0, 31);
   seq = g_hash_table_lookup (parser->sequences, &seq_parameter_set_id);
   if (!seq) {
-    GST_WARNING ("Couldn't find associated sequence parameter set");
+    GST_WARNING ("couldn't find associated sequence parameter set with id: %d",
+        seq_parameter_set_id);
     goto error;
   }
   pic->sequence = seq;
@@ -426,16 +430,17 @@ gst_h264_parser_parse_picture (GstH264Parser * parser, guint8 * data,
   READ_UE_ALLOWED (&reader, pic->num_ref_idx_l0_active_minus1, 0, 31);
   READ_UE_ALLOWED (&reader, pic->num_ref_idx_l1_active_minus1, 0, 31);
   READ_UINT8 (&reader, pic->weighted_pred_flag, 1);
-  READ_UINT8 (&reader, pic->weighted_bipred_idc, 1);
+  READ_UINT8 (&reader, pic->weighted_bipred_idc, 2);
   READ_SE_ALLOWED (&reader, pic->pic_init_qp_minus26, -26, 25);
   READ_SE_ALLOWED (&reader, pic->pic_init_qs_minus26, -26, 25);
   READ_SE_ALLOWED (&reader, pic->chroma_qp_index_offset, -12, 12);
+  pic->second_chroma_qp_index_offset = pic->chroma_qp_index_offset;
   READ_UINT8 (&reader, pic->deblocking_filter_control_present_flag, 1);
   READ_UINT8 (&reader, pic->constrained_intra_pred_flag, 1);
   READ_UINT8 (&reader, pic->redundant_pic_cnt_present_flag, 1);
 
   if (!gst_h264_parser_more_data (&reader))
-    return pic;
+    goto done;
 
   READ_UINT8 (&reader, pic->transform_8x8_mode_flag, 1);
 
@@ -459,6 +464,7 @@ gst_h264_parser_parse_picture (GstH264Parser * parser, guint8 * data,
 
   READ_SE_ALLOWED (&reader, pic->second_chroma_qp_index_offset, -12, 12);
 
+done:
   GST_DEBUG ("adding picture parameter set with id: %d to hash table", pic->id);
   g_hash_table_replace (parser->pictures, &pic->id, pic);
   return pic;
@@ -674,7 +680,8 @@ gst_h264_parser_parse_slice_header (GstH264Parser * parser,
   READ_UE_ALLOWED (&reader, pic_parameter_set_id, 0, 255);
   pic = g_hash_table_lookup (parser->pictures, &pic_parameter_set_id);
   if (!pic) {
-    GST_WARNING ("couldn't find associated picture parameter set");
+    GST_WARNING ("couldn't find associated picture parameter set with id: %d",
+        pic_parameter_set_id);
     goto error;
   }
   slice->picture = pic;
