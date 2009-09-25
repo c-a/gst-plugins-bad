@@ -52,6 +52,27 @@ GST_BOILERPLATE_FULL (GstH264Parse2, gst_h264_parse2, SatBaseVideoParse,
 
 #define SYNC_CODE_SIZE 3
 
+#define READ_UINT8(reader, val, nbits) { \
+  if (!gst_bit_reader_get_bits_uint8 (reader, &val, nbits)) { \
+    GST_WARNING ("failed to read uint8, nbits: %d", nbits); \
+    return FALSE; \
+  } \
+}
+
+#define READ_UINT16(reader, val, nbits) { \
+  if (!gst_bit_reader_get_bits_uint16 (reader, &val, nbits)) { \
+  GST_WARNING ("failed to read uint16, nbits: %d", nbits); \
+    return FALSE; \
+  } \
+}
+
+#define SKIP(reader, nbits) { \
+  if (!gst_bit_reader_skip (reader, nbits)) { \
+  GST_WARNING ("failed to skip nbits: %d", nbits); \
+    return FALSE; \
+  } \
+}
+
 static gboolean
 gst_h264_parse2_set_sink_caps (SatBaseVideoParse * parse, GstCaps * caps)
 {
@@ -84,63 +105,48 @@ gst_h264_parse2_set_sink_caps (SatBaseVideoParse * parse, GstCaps * caps)
 
     gst_bit_reader_init_from_buffer (&reader, buf);
 
-    if (!gst_bit_reader_get_bits_uint8 (&reader, &version, 8))
-      return FALSE;
+    READ_UINT8 (&reader, version, 8);
     if (version != 1)
       return FALSE;
 
-    if (!gst_bit_reader_skip (&reader, 30))
-      return FALSE;
+    SKIP (&reader, 30);
 
-    if (!gst_bit_reader_get_bits_uint8 (&reader, &h264parse->nal_length_size,
-            2))
-      return FALSE;
+    READ_UINT8 (&reader, h264parse->nal_length_size, 2);
     h264parse->nal_length_size += 1;
     GST_DEBUG_OBJECT (h264parse, "nal length %u", h264parse->nal_length_size);
 
-    if (!gst_bit_reader_skip (&reader, 3))
-      return FALSE;
+    SKIP (&reader, 3);
 
-    if (!gst_bit_reader_get_bits_uint8 (&reader, &n_sps, 5))
-      return FALSE;
+    READ_UINT8 (&reader, n_sps, 5);
     for (i = 0; i < n_sps; i++) {
       guint16 sps_length;
       guint8 *data;
 
-      if (!gst_bit_reader_get_bits_uint16 (&reader, &sps_length, 16))
-        return FALSE;
-
+      READ_UINT16 (&reader, sps_length, 16);
       sps_length -= 1;
-      if (!gst_bit_reader_skip (&reader, 8))
-        return FALSE;
+      SKIP (&reader, 8);
 
       data = GST_BUFFER_DATA (buf) + gst_bit_reader_get_pos (&reader) / 8;
       if (!gst_h264_parser_parse_sequence (h264parse->parser, data, sps_length))
         return FALSE;
 
-      if (!gst_bit_reader_skip (&reader, sps_length * 8))
-        return FALSE;
+      SKIP (&reader, sps_length * 8);
     }
 
-    if (!gst_bit_reader_get_bits_uint8 (&reader, &n_pps, 8))
-      return FALSE;
+    READ_UINT8 (&reader, n_pps, 8);
     for (i = 0; i < n_pps; i++) {
       guint16 pps_length;
       guint8 *data;
 
-      if (!gst_bit_reader_get_bits_uint16 (&reader, &pps_length, 16))
-        return FALSE;
-
+      READ_UINT16 (&reader, pps_length, 16);
       pps_length -= 1;
-      if (!gst_bit_reader_skip (&reader, 8))
-        return FALSE;
+      SKIP (&reader, 8);
 
       data = GST_BUFFER_DATA (buf) + gst_bit_reader_get_pos (&reader) / 8;
       if (!gst_h264_parser_parse_picture (h264parse->parser, data, pps_length))
         return FALSE;
 
-      if (!gst_bit_reader_skip (&reader, pps_length * 8))
-        return FALSE;
+      SKIP (&reader, pps_length * 8);
     }
 
     h264parse->codec_data = buf;
