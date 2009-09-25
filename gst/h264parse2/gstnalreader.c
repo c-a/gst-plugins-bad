@@ -399,16 +399,16 @@ gboolean
 gst_nal_reader_get_ue (GstNalReader * reader, guint32 * val)
 {
   guint i = 0;
-  guint8 byte;
+  guint8 bit;
   guint32 value;
 
-  if (G_UNLIKELY (!gst_nal_reader_get_bits_uint8 (reader, &byte, 1)))
+  if (G_UNLIKELY (!gst_nal_reader_get_bits_uint8 (reader, &bit, 1)))
     return FALSE;
 
-  while (byte == 0) {
+  while (bit == 0) {
     i++;
     if G_UNLIKELY
-      ((!gst_nal_reader_get_bits_uint8 (reader, &byte, 1)))
+      ((!gst_nal_reader_get_bits_uint8 (reader, &bit, 1)))
           return FALSE;
   }
 
