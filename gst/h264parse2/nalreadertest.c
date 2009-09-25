@@ -249,6 +249,7 @@ GST_END_TEST;
 GST_START_TEST (test_golomb)
 {
   guint8 data[] = { 0x00, 0x00, 0x03, 0xff, 0xff, 0xa5 };
+  guint8 data2[] = { 0xA6, 0x42, 0x98, 0xE0 };
 
   GstNalReader reader = GST_NAL_READER_INIT (data, 6);
   guint8 byte;
@@ -256,6 +257,15 @@ GST_START_TEST (test_golomb)
   GET_CHECK_UE (&reader, (0xffffa5 >> 7) - 1);
   GET_CHECK (&reader, byte, 8, 7, 0x25);
   GET_CHECK_FAIL (&reader, byte, 8, 1);
+
+  gst_nal_reader_init (&reader, data2, 6);
+  GET_CHECK_UE (&reader, 0);
+  GET_CHECK_UE (&reader, 1);
+  GET_CHECK_UE (&reader, 2);
+  GET_CHECK_UE (&reader, 3);
+  GET_CHECK_UE (&reader, 4);
+  GET_CHECK_UE (&reader, 5);
+  GET_CHECK_UE (&reader, 6);
 }
 
 GST_END_TEST;
