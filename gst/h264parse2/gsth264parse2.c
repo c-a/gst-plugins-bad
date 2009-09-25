@@ -65,32 +65,83 @@ gst_h264_parse2_set_sink_caps (SatBaseVideoParse * parse, GstCaps * caps)
   /* packetized video has a codec_data */
   if ((value = gst_structure_get_value (structure, "codec_data"))) {
     GstBuffer *buf;
-    guint8 *data;
-    guint size;
+    GstBitReader reader;
+    guint8 version;
+    guint8 n_sps, n_pps;
+    gint i;
 
     GST_DEBUG_OBJECT (h264parse, "have packetized h264");
     h264parse->packetized = TRUE;
 
     buf = gst_value_get_buffer (value);
-    data = GST_BUFFER_DATA (buf);
-    size = GST_BUFFER_SIZE (buf);
+    GST_MEMDUMP ("avcC:", GST_BUFFER_DATA (buf), GST_BUFFER_SIZE (buf));
 
     /* parse the avcC data */
-    if (size < 7) {
-      GST_ERROR_OBJECT (h264parse, "avcC size %u < 7", size);
-      return FALSE;
-    }
-    /* parse the version, this must be 1 */
-    if (data[0] != 1) {
-      GST_ERROR_OBJECT (h264parse, "wrong avcC version");
+    if (GST_BUFFER_SIZE (buf) < 7) {
+      GST_ERROR_OBJECT (h264parse, "avcC size %u < 7", GST_BUFFER_SIZE (buf));
       return FALSE;
     }
 
-    /* 6 bits reserved | 2 bits lengthSizeMinusOne */
-    /* this is the number of bytes in front of the NAL units to mark their
-     * length */
-    h264parse->nal_length_size = (data[4] & 0x03) + 1;
+    gst_bit_reader_init_from_buffer (&reader, buf);
+
+    if (!gst_bit_reader_get_bits_uint8 (&reader, &version, 8))
+      return FALSE;
+    if (version != 1)
+      return FALSE;
+
+    if (!gst_bit_reader_skip (&reader, 30))
+      return FALSE;
+
+    if (!gst_bit_reader_get_bits_uint8 (&reader, &h264parse->nal_length_size,
+            2))
+      return FALSE;
+    h264parse->nal_length_size += 1;
     GST_DEBUG_OBJECT (h264parse, "nal length %u", h264parse->nal_length_size);
+
+    if (!gst_bit_reader_skip (&reader, 3))
+      return FALSE;
+
+    if (!gst_bit_reader_get_bits_uint8 (&reader, &n_sps, 5))
+      return FALSE;
+    for (i = 0; i < n_sps; i++) {
+      guint16 sps_length;
+      guint8 *data;
+
+      if (!gst_bit_reader_get_bits_uint16 (&reader, &sps_length, 16))
+        return FALSE;
+
+      sps_length -= 1;
+      if (!gst_bit_reader_skip (&reader, 8))
+        return FALSE;
+
+      data = GST_BUFFER_DATA (buf) + gst_bit_reader_get_pos (&reader) / 8;
+      if (!gst_h264_parser_parse_sequence (h264parse->parser, data, sps_length))
+        return FALSE;
+
+      if (!gst_bit_reader_skip (&reader, sps_length * 8))
+        return FALSE;
+    }
+
+    if (!gst_bit_reader_get_bits_uint8 (&reader, &n_pps, 8))
+      return FALSE;
+    for (i = 0; i < n_pps; i++) {
+      guint16 pps_length;
+      guint8 *data;
+
+      if (!gst_bit_reader_get_bits_uint16 (&reader, &pps_length, 16))
+        return FALSE;
+
+      pps_length -= 1;
+      if (!gst_bit_reader_skip (&reader, 8))
+        return FALSE;
+
+      data = GST_BUFFER_DATA (buf) + gst_bit_reader_get_pos (&reader) / 8;
+      if (!gst_h264_parser_parse_picture (h264parse->parser, data, pps_length))
+        return FALSE;
+
+      if (!gst_bit_reader_skip (&reader, pps_length * 8))
+        return FALSE;
+    }
 
     h264parse->codec_data = buf;
   }
@@ -219,6 +270,14 @@ gst_h264_parse2_scan_for_packet_end (SatBaseVideoParse * parse,
 }
 
 static GstFlowReturn
+gst_h264_parse2_frame_finish (GstH264Parse2 * h264parse)
+{
+  h264parse->got_primary_coded_picture = FALSE;
+
+  return sat_base_video_parse_frame_finish (SAT_BASE_VIDEO_PARSE (h264parse));
+}
+
+static GstFlowReturn
 gst_h264_parse2_parse_data (SatBaseVideoParse * parse, GstBuffer * buffer)
 {
   GstH264Parse2 *h264parse = GST_H264_PARSE2 (parse);
@@ -229,6 +288,8 @@ gst_h264_parse2_parse_data (SatBaseVideoParse * parse, GstBuffer * buffer)
   guint8 *data;
   guint size;
   gint i;
+
+  GST_MEMDUMP ("data", GST_BUFFER_DATA (buffer), GST_BUFFER_SIZE (buffer));
 
   gst_bit_reader_init_from_buffer (&reader, buffer);
 
@@ -265,6 +326,17 @@ gst_h264_parse2_parse_data (SatBaseVideoParse * parse, GstBuffer * buffer)
     i--;
   }
 
+  /* does this mark the beginning of a new access unit */
+  if (nal_unit.type == GST_NAL_AU_DELIMITER)
+    gst_h264_parse2_frame_finish (h264parse);
+
+  if (h264parse->got_primary_coded_picture) {
+    if (nal_unit.type == GST_NAL_SPS || nal_unit.type == GST_NAL_PPS ||
+        nal_unit.type == GST_NAL_SEI ||
+        (nal_unit.type >= 14 && nal_unit.type <= 18))
+      gst_h264_parse2_frame_finish (h264parse);
+  }
+
   if (nal_unit.type >= GST_NAL_SLICE && nal_unit.type <= GST_NAL_SLICE_IDR) {
     GstH264Slice slice;
 
@@ -272,8 +344,50 @@ gst_h264_parse2_parse_data (SatBaseVideoParse * parse, GstBuffer * buffer)
             size, nal_unit))
       goto invalid_packet;
 
-    if (GST_H264_IS_I_SLICE (slice.type) || GST_H264_IS_SI_SLICE (slice.type))
-      sat_base_video_parse_frame_set_keyframe (parse);
+    if (slice.redundant_pic_cnt == 0) {
+      if (h264parse->got_primary_coded_picture) {
+        GstH264Slice *p_slice;
+        guint8 pic_order_cnt_type, p_pic_order_cnt_type;
+
+        p_slice = &h264parse->slice;
+        pic_order_cnt_type = slice.picture->sequence->pic_order_cnt_type;
+        p_pic_order_cnt_type = p_slice->picture->sequence->pic_order_cnt_type;
+
+        if (slice.frame_num != p_slice->frame_num)
+          gst_h264_parse2_frame_finish (h264parse);
+
+        else if (slice.picture != p_slice->picture)
+          gst_h264_parse2_frame_finish (h264parse);
+
+        else if (slice.bottom_field_flag != p_slice->bottom_field_flag)
+          gst_h264_parse2_frame_finish (h264parse);
+
+        else if (nal_unit.ref_idc != p_slice->nal_unit.ref_idc &&
+            (nal_unit.ref_idc == 0 || p_slice->nal_unit.ref_idc == 0))
+          gst_h264_parse2_frame_finish (h264parse);
+
+        else if ((pic_order_cnt_type == 0 && p_pic_order_cnt_type == 0) &&
+            (slice.pic_order_cnt_lsb != p_slice->pic_order_cnt_lsb ||
+                slice.delta_pic_order_cnt_bottom !=
+                p_slice->delta_pic_order_cnt_bottom))
+          gst_h264_parse2_frame_finish (h264parse);
+
+        else if ((p_pic_order_cnt_type == 1 && p_pic_order_cnt_type == 1) &&
+            (slice.delta_pic_order_cnt[0] != p_slice->delta_pic_order_cnt[0] ||
+                slice.delta_pic_order_cnt[1] !=
+                p_slice->delta_pic_order_cnt[1]))
+          gst_h264_parse2_frame_finish (h264parse);
+      }
+
+      if (!h264parse->got_primary_coded_picture) {
+        if (GST_H264_IS_I_SLICE (slice.type)
+            || GST_H264_IS_SI_SLICE (slice.type))
+          sat_base_video_parse_frame_set_keyframe (parse);
+
+        h264parse->slice = slice;
+        h264parse->got_primary_coded_picture = TRUE;
+      }
+    }
   }
 
   if (nal_unit.type == GST_NAL_SPS) {
@@ -287,7 +401,6 @@ gst_h264_parse2_parse_data (SatBaseVideoParse * parse, GstBuffer * buffer)
   }
 
   sat_base_video_parse_frame_add (parse, buffer);
-  sat_base_video_parse_frame_finish (parse);
 
   return GST_FLOW_OK;
 
@@ -350,6 +463,8 @@ gst_h264_parse2_start (SatBaseVideoParse * parse)
   h264parse->nal_length_size = SYNC_CODE_SIZE;
   h264parse->parser = g_object_new (GST_TYPE_H264_PARSER, NULL);
 
+  h264parse->got_primary_coded_picture = FALSE;
+
   h264parse->byterate = -1;
   h264parse->byte_offset = 0;
 
@@ -371,9 +486,9 @@ gst_h264_parse2_stop (SatBaseVideoParse * parse)
 static void
 gst_h264_parse2_flush (SatBaseVideoParse * parse)
 {
-#if 0
   GstH264Parse2 *h264parse = GST_H264_PARSE2 (parse);
-#endif
+
+  h264parse->got_primary_coded_picture = FALSE;
 }
 
 static void
