@@ -48,6 +48,7 @@ void gst_nal_reader_init_from_buffer (GstNalReader * reader, const GstBuffer * b
 gboolean gst_nal_reader_skip (GstNalReader *reader, guint nbits);
 gboolean gst_nal_reader_skip_to_byte (GstNalReader *reader);
 
+guint gst_nal_reader_get_pos (const GstNalReader * reader);
 guint gst_nal_reader_get_remaining (const GstNalReader *reader);
 
 gboolean gst_nal_reader_get_bits_uint8 (GstNalReader *reader, guint8 *val, guint nbits);

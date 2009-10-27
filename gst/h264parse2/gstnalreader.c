@@ -193,6 +193,21 @@ gst_nal_reader_skip_to_byte (GstNalReader * reader)
 }
 
 /**
+ * gst_nal_reader_get_pos:
+ * @reader: a #GstNalReader instance
+ *
+ * Returns the current position of a GstNalReader instance in bits.
+ *
+ * Returns: The current position in bits
+ *
+ */
+guint
+gst_nal_reader_get_pos (const GstNalReader * reader)
+{
+  return reader->byte * 8 - reader->bits_in_cache;
+}
+
+/**
  * gst_nal_reader_get_remaining:
  * @reader: a #GstNalReader instance
  *
