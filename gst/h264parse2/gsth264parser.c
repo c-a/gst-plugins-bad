@@ -132,6 +132,123 @@ gst_h264_sequence_free (void *data)
 }
 
 static gboolean
+gst_h264_parse_hrd_parameters (GstH264HRDParameters * hrd,
+    GstNalReader * reader)
+{
+  guint SchedSelIdx;
+
+  GST_DEBUG ("parsing \"HRD Parameters\"");
+
+  READ_UE_ALLOWED (reader, hrd->cpb_cnt_minus1, 0, 31);
+  READ_UINT8 (reader, hrd->bit_rate_scale, 4);
+  READ_UINT8 (reader, hrd->cpb_size_scale, 4);
+
+  for (SchedSelIdx = 0; SchedSelIdx <= hrd->cpb_cnt_minus1; SchedSelIdx++) {
+    READ_UE (reader, hrd->bit_rate_value_minus1[SchedSelIdx]);
+    READ_UE (reader, hrd->cpb_size_value_minus1[SchedSelIdx]);
+  }
+
+  READ_UINT8 (reader, hrd->initial_cpb_removal_delay_length_minus1, 5);
+  READ_UINT8 (reader, hrd->cpb_removal_delay_length_minus1, 5);
+  READ_UINT8 (reader, hrd->dpb_output_delay_length_minus1, 5);
+  READ_UINT8 (reader, hrd->time_offset_length, 5);
+
+  return TRUE;
+
+error:
+  GST_WARNING ("error parsing \"HRD Parameters\"");
+  return FALSE;
+
+}
+
+static gboolean
+gst_h264_parse_vui_parameters (GstH264VUIParameters * vui,
+    GstNalReader * reader)
+{
+  guint8 aspect_ratio_info_present_flag;
+  guint8 video_signal_type_present_flag;
+  guint8 chroma_loc_info_present_flag;
+
+  GST_DEBUG ("parsing \"VUI Parameters\"");
+
+  /* set default values for fields that might not be present in the bitstream
+     and have valid defaults */
+  vui->aspect_ratio_idc = 0;
+  vui->video_format = 5;
+  vui->video_full_range_flag = 0;
+  vui->colour_primaries = 2;
+  vui->transfer_characteristics = 2;
+  vui->matrix_coefficients = 2;
+  vui->chroma_sample_loc_type_top_field = 0;
+  vui->chroma_sample_loc_type_bottom_field = 0;
+  vui->low_delay_hrd_flag = 0;
+
+  READ_UINT8 (reader, aspect_ratio_info_present_flag, 1);
+  if (aspect_ratio_info_present_flag) {
+    READ_UINT8 (reader, vui->aspect_ratio_idc, 8);
+    if (vui->aspect_ratio_idc == 255) {
+      READ_UINT16 (reader, vui->sar_width, 16);
+      READ_UINT16 (reader, vui->sar_height, 16);
+    }
+  }
+
+  READ_UINT8 (reader, vui->overscan_info_present_flag, 1);
+  if (vui->overscan_info_present_flag)
+    READ_UINT8 (reader, vui->overscan_appropriate_flag, 1);
+
+  READ_UINT8 (reader, video_signal_type_present_flag, 1);
+  if (video_signal_type_present_flag) {
+    guint8 colour_description_present_flag;
+
+    READ_UINT8 (reader, vui->video_format, 3);
+    READ_UINT8 (reader, vui->video_full_range_flag, 1);
+    READ_UINT8 (reader, colour_description_present_flag, 1);
+    if (colour_description_present_flag) {
+      READ_UINT8 (reader, vui->colour_primaries, 8);
+      READ_UINT8 (reader, vui->transfer_characteristics, 8);
+      READ_UINT8 (reader, vui->matrix_coefficients, 8);
+    }
+  }
+
+  READ_UINT8 (reader, chroma_loc_info_present_flag, 1);
+  if (chroma_loc_info_present_flag) {
+    READ_UE_ALLOWED (reader, vui->chroma_sample_loc_type_top_field, 0, 5);
+    READ_UE_ALLOWED (reader, vui->chroma_sample_loc_type_bottom_field, 0, 5);
+  }
+
+  READ_UINT8 (reader, vui->timing_info_present_flag, 1);
+  if (vui->timing_info_present_flag) {
+    READ_UINT32 (reader, vui->num_units_in_tick, 32);
+    READ_UINT32 (reader, vui->time_scale, 32);
+    READ_UINT8 (reader, vui->fixed_frame_rate_flag, 1);
+  }
+
+  READ_UINT8 (reader, vui->nal_hrd_parameters_present_flag, 1);
+  if (vui->nal_hrd_parameters_present_flag) {
+    if (!gst_h264_parse_hrd_parameters (&vui->nal_hrd_parameters, reader))
+      goto error;
+  }
+
+  READ_UINT8 (reader, vui->vcl_hrd_parameters_present_flag, 1);
+  if (vui->vcl_hrd_parameters_present_flag) {
+    if (!gst_h264_parse_hrd_parameters (&vui->vcl_hrd_parameters, reader))
+      goto error;
+  }
+
+  if (vui->nal_hrd_parameters_present_flag ||
+      vui->vcl_hrd_parameters_present_flag)
+    READ_UINT8 (reader, vui->low_delay_hrd_flag, 1);
+
+  READ_UINT8 (reader, vui->pic_struct_present_flag, 1);
+
+  return TRUE;
+
+error:
+  GST_WARNING ("error parsing \"VUI Parameters\"");
+  return FALSE;
+}
+
+static gboolean
 gst_h264_parser_parse_scaling_list (GstNalReader * reader,
     guint8 scaling_lists_4x4[6][16], guint8 scaling_lists_8x8[6][64],
     const guint8 fallback_4x4_inter[16], const guint8 fallback_4x4_intra[16],
@@ -332,6 +449,12 @@ gst_h264_parser_parse_sequence (GstH264Parser * parser, guint8 * data,
     READ_UE (&reader, seq->frame_crop_right_offset);
     READ_UE (&reader, seq->frame_crop_top_offset);
     READ_UE (&reader, seq->frame_crop_bottom_offset);
+  }
+
+  READ_UINT8 (&reader, seq->vui_parameters_present_flag, 1);
+  if (seq->vui_parameters_present_flag) {
+    if (!gst_h264_parse_vui_parameters (&seq->vui_parameters, &reader))
+      goto error;
   }
 
   GST_DEBUG ("adding sequence parameter set with id: %d to hash table",
@@ -786,6 +909,115 @@ gst_h264_parser_parse_slice_header (GstH264Parser * parser,
 
 error:
   GST_WARNING ("error parsing \"Slice header\"");
+  return FALSE;
+}
+
+static gboolean
+gst_h264_parser_parse_buffering_period (GstH264Parser * parser,
+    GstH264BufferingPeriod * per, guint8 * data, guint size)
+{
+  GstNalReader reader = GST_NAL_READER_INIT (data, size);
+
+  GstH264Sequence *seq;
+  guint8 seq_parameter_set_id;
+
+  GST_DEBUG ("parsing \"Buffering period\"");
+
+  READ_UE_ALLOWED (&reader, seq_parameter_set_id, 0, 31);
+  seq = g_hash_table_lookup (parser->sequences, &seq_parameter_set_id);
+  if (!seq) {
+    GST_WARNING ("couldn't find associated sequence parameter set with id: %d",
+        seq_parameter_set_id);
+    goto error;
+  }
+  per->seq = seq;
+
+  if (seq->vui_parameters_present_flag) {
+    GstH264VUIParameters *vui = &seq->vui_parameters;
+
+    if (vui->nal_hrd_parameters_present_flag) {
+      GstH264HRDParameters *hrd = &vui->nal_hrd_parameters;
+      guint8 SchedSelIdx;
+
+      for (SchedSelIdx = 0; SchedSelIdx <= hrd->cpb_cnt_minus1; SchedSelIdx++) {
+        READ_UINT8 (&reader, per->nal_initial_cpb_removal_delay[SchedSelIdx],
+            5);
+        READ_UINT8 (&reader,
+            per->nal_initial_cpb_removal_delay_offset[SchedSelIdx], 5);
+      }
+    }
+
+    if (vui->vcl_hrd_parameters_present_flag) {
+      GstH264HRDParameters *hrd = &vui->vcl_hrd_parameters;
+      guint8 SchedSelIdx;
+
+      for (SchedSelIdx = 0; SchedSelIdx <= hrd->cpb_cnt_minus1; SchedSelIdx++) {
+        READ_UINT8 (&reader, per->vcl_initial_cpb_removal_delay[SchedSelIdx],
+            5);
+        READ_UINT8 (&reader,
+            per->vcl_initial_cpb_removal_delay_offset[SchedSelIdx], 5);
+      }
+    }
+  }
+
+  return TRUE;
+
+error:
+  GST_WARNING ("error parsing \"Buffering period\"");
+  return FALSE;
+}
+
+gboolean
+gst_h264_parser_parse_sei_message (GstH264Parser * parser,
+    GstH264SEIMessage * sei, guint8 * data, guint size)
+{
+  GstNalReader reader;
+
+  guint32 payloadSize;
+  guint8 payload_type_byte, payload_size_byte;
+
+  guint8 *payload_data;
+  guint remaining, payload_size;
+  gboolean res;
+
+  g_return_val_if_fail (GST_IS_H264_PARSER (parser), FALSE);
+  g_return_val_if_fail (sei != NULL, FALSE);
+  g_return_val_if_fail (data != NULL, FALSE);
+  g_return_val_if_fail (size > 0, FALSE);
+
+  GST_DEBUG ("parsing \"Sei message\"");
+
+  gst_nal_reader_init (&reader, data, size);
+
+  sei->payloadType = 0;
+  do {
+    READ_UINT8 (&reader, payload_type_byte, 8);
+    sei->payloadType += payload_type_byte;
+  }
+  while (payload_type_byte == 0xff);
+
+  payloadSize = 0;
+  do {
+    READ_UINT8 (&reader, payload_size_byte, 8);
+    payloadSize += payload_size_byte;
+  }
+  while (payload_size_byte == 0xff);
+
+  payload_data = data + gst_nal_reader_get_pos (&reader) * 8;
+  remaining = gst_nal_reader_get_remaining (&reader) * 8;
+  payload_size = payloadSize < remaining ? payloadSize : remaining;
+
+  if (sei->payloadType == 0)
+    res =
+        gst_h264_parser_parse_buffering_period (parser,
+        &sei->buffering_period, payload_data, payload_size);
+  else
+    res = TRUE;
+
+  return res;
+
+error:
+  GST_WARNING ("error parsing \"Sei message\"");
   return FALSE;
 }
 

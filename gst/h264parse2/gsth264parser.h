@@ -63,12 +63,19 @@ typedef enum
 #define GST_H264_IS_SI_SLICE(type) ((type % 5) == GST_H264_SI_SLICE)
 
 typedef struct _GstNalUnit GstNalUnit;
+
+typedef struct _GstH264HRDParameters GstH264HRDParameters;
+typedef struct _GstH264VUIParameters GstH264VUIParameters;
 typedef struct _GstH264Sequence GstH264Sequence;
+
 typedef struct _GstH264Picture GstH264Picture;
 
 typedef struct _GstH264DecRefPicMarking GstH264DecRefPicMarking;
 typedef struct _GstH264PredWeightTable GstH264PredWeightTable;
 typedef struct _GstH264Slice GstH264Slice;
+
+typedef struct _GstH264BufferingPeriod GstH264BufferingPeriod;
+typedef struct _GstH264SEIMessage GstH264SEIMessage;
 
 struct _GstNalUnit
 {
@@ -77,6 +84,61 @@ struct _GstNalUnit
 
   /* calculated values */
   guint8 IdrPicFlag;
+};
+
+struct _GstH264HRDParameters
+{
+  guint8 cpb_cnt_minus1;
+  guint8 bit_rate_scale;
+  guint8 cpb_size_scale;
+
+  guint32 bit_rate_value_minus1[32];
+  guint32 cpb_size_value_minus1[32];
+  guint8 cbr_flag[32];
+
+  guint8 initial_cpb_removal_delay_length_minus1;
+  guint8 cpb_removal_delay_length_minus1;
+  guint8 dpb_output_delay_length_minus1;
+  guint8 time_offset_length;
+};
+
+struct _GstH264VUIParameters
+{
+  guint8 aspect_ratio_idc;
+  /* if aspect_ratio_idc == 255 */
+  guint16 sar_width;
+  guint16 sar_height;
+
+  guint8 overscan_info_present_flag;
+  /* if overscan_info_present_flag */
+  guint8 overscan_appropriate_flag;
+
+  guint8 video_format;
+  guint8 video_full_range_flag;
+  guint8 colour_description_present_flag;
+  guint8 colour_primaries;
+  guint8 transfer_characteristics;
+  guint8 matrix_coefficients;
+
+  guint8 chroma_sample_loc_type_top_field;
+  guint8 chroma_sample_loc_type_bottom_field;
+
+  guint8 timing_info_present_flag;
+  /* if timing_info_present_flag */
+  guint32 num_units_in_tick;
+  guint32 time_scale;
+  guint8 fixed_frame_rate_flag;
+
+  guint8 nal_hrd_parameters_present_flag;
+  /* if nal_hrd_parameters_present_flag */
+  GstH264HRDParameters nal_hrd_parameters;
+
+  guint8 vcl_hrd_parameters_present_flag;
+  /* if nal_hrd_parameters_present_flag */
+  GstH264HRDParameters vcl_hrd_parameters;
+
+  guint8 low_delay_hrd_flag;
+  guint8 pic_struct_present_flag;
 };
 
 struct _GstH264Sequence
@@ -129,6 +191,10 @@ struct _GstH264Sequence
   guint32 frame_crop_top_offset;
   guint32 frame_crop_bottom_offset;
 
+  guint8 vui_parameters_present_flag;
+  /* if vui_parameters_present_flag */
+  GstH264VUIParameters vui_parameters;
+  
   /* calculated values */
   guint8 ChromaArrayType;
   guint32 MaxFrameNum;
@@ -252,6 +318,28 @@ struct _GstH264Slice
   guint32 MaxPicNum;
 };
 
+struct _GstH264BufferingPeriod
+{
+  GstH264Sequence *seq;
+  
+  /* seq->vui_parameters->nal_hrd_parameters_present_flag */
+  guint8 nal_initial_cpb_removal_delay[32];
+  guint8 nal_initial_cpb_removal_delay_offset[32];
+
+  /* seq->vui_parameters->vcl_hrd_parameters_present_flag */
+  guint8 vcl_initial_cpb_removal_delay[32];
+  guint8 vcl_initial_cpb_removal_delay_offset[32];
+};
+
+struct _GstH264SEIMessage
+{
+  guint32 payloadType;
+
+  union {
+    GstH264BufferingPeriod buffering_period;
+  };
+};
+
 #define GST_TYPE_H264_PARSER             (gst_h264_parser_get_type ())
 #define GST_H264_PARSER(obj)             (G_TYPE_CHECK_INSTANCE_CAST ((obj), GST_TYPE_H264_PARSER, GstH264Parser))
 #define GST_H264_PARSER_CLASS(klass)     (G_TYPE_CHECK_CLASS_CAST ((klass), GST_TYPE_H264_PARSER, GstH264ParserClass))
@@ -280,6 +368,7 @@ GType gst_h264_parser_get_type (void) G_GNUC_CONST;
 GstH264Sequence *gst_h264_parser_parse_sequence (GstH264Parser * parser, guint8 * data, guint size);
 GstH264Picture *gst_h264_parser_parse_picture (GstH264Parser * parser, guint8 * data, guint size);
 gboolean gst_h264_parser_parse_slice_header (GstH264Parser * parser, GstH264Slice * slice, guint8 * data, guint size, GstNalUnit nal_unit);
+gboolean gst_h264_parser_parse_sei_message (GstH264Parser * parser, GstH264SEIMessage * sei, guint8 * data, guint size);
 
 G_END_DECLS
 
