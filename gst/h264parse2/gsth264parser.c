@@ -967,9 +967,127 @@ error:
   return FALSE;
 }
 
+static gboolean
+gst_h264_parse_clock_timestamp (GstH264ClockTimestamp * tim,
+    GstH264VUIParameters * vui, GstNalReader * reader)
+{
+  guint8 full_timestamp_flag;
+  guint8 time_offset_length;
+
+  GST_DEBUG ("parsing \"Clock timestamp\"");
+
+  /* defalt values */
+  tim->time_offset = 0;
+
+  READ_UINT8 (reader, tim->ct_type, 2);
+  READ_UINT8 (reader, tim->nuit_field_based_flag, 1);
+  READ_UINT8 (reader, tim->counting_type, 5);
+  READ_UINT8 (reader, full_timestamp_flag, 1);
+  READ_UINT8 (reader, tim->discontinuity_flag, 1);
+  READ_UINT8 (reader, tim->cnt_dropped_flag, 1);
+  READ_UINT8 (reader, tim->n_frames, 8);
+
+  if (full_timestamp_flag) {
+    tim->seconds_flag = TRUE;
+    READ_UINT8 (reader, tim->seconds_value, 6);
+
+    tim->minutes_flag = TRUE;
+    READ_UINT8 (reader, tim->minutes_value, 6);
+
+    tim->hours_flag = TRUE;
+    READ_UINT8 (reader, tim->hours_value, 5);
+  } else {
+    READ_UINT8 (reader, tim->seconds_flag, 1);
+    if (tim->seconds_flag) {
+      READ_UINT8 (reader, tim->seconds_value, 6);
+      READ_UINT8 (reader, tim->minutes_flag, 1);
+      if (tim->minutes_flag) {
+        READ_UINT8 (reader, tim->minutes_value, 6);
+        READ_UINT8 (reader, tim->hours_flag, 1);
+        if (tim->hours_flag)
+          READ_UINT8 (reader, tim->hours_value, 5);
+      }
+    }
+  }
+
+  time_offset_length = 0;
+  if (vui->nal_hrd_parameters_present_flag)
+    time_offset_length = vui->nal_hrd_parameters.time_offset_length;
+  else if (vui->vcl_hrd_parameters_present_flag)
+    time_offset_length = vui->vcl_hrd_parameters.time_offset_length;
+
+  if (time_offset_length > 0)
+    READ_UINT32 (reader, tim->time_offset, time_offset_length);
+
+error:
+  GST_WARNING ("error parsing \"Clock timestamp\"");
+  return FALSE;
+}
+
+static gboolean
+gst_h264_parser_parse_pic_timing (GstH264Parser * parser, GstH264Sequence * seq,
+    GstH264PicTiming * tim, guint8 * data, guint size)
+{
+  GstNalReader reader = GST_NAL_READER_INIT (data, size);
+
+  GST_DEBUG ("parsing \"Picture timing\"");
+
+  if (!seq) {
+    GST_WARNING ("didn't get the associated sequence paramater set for the "
+        "current access unit");
+    goto error;
+  }
+
+  /* default values */
+  memset (tim->clock_timestamp_flag, 0, 3);
+
+  if (seq->vui_parameters_present_flag) {
+    GstH264VUIParameters *vui = &seq->vui_parameters;
+
+    if (vui->nal_hrd_parameters_present_flag) {
+      READ_UINT8 (&reader, tim->cpb_removal_delay,
+          vui->nal_hrd_parameters.cpb_removal_delay_length_minus1 + 1);
+      READ_UINT8 (&reader, tim->dpb_output_delay,
+          vui->nal_hrd_parameters.dpb_output_delay_length_minus1 + 1);
+    } else if (vui->nal_hrd_parameters_present_flag) {
+      READ_UINT8 (&reader, tim->cpb_removal_delay,
+          vui->vcl_hrd_parameters.cpb_removal_delay_length_minus1 + 1);
+      READ_UINT8 (&reader, tim->dpb_output_delay,
+          vui->vcl_hrd_parameters.dpb_output_delay_length_minus1 + 1);
+    }
+
+    if (vui->pic_struct_present_flag) {
+      const guint8 num_clock_ts_table[9] = {
+        1, 1, 1, 2, 2, 3, 3, 2, 3
+      };
+      guint8 NumClockTs;
+      guint i;
+
+      READ_UINT8 (&reader, tim->pic_struct, 4);
+      CHECK_ALLOWED (tim->pic_struct, 0, 8);
+
+      NumClockTs = num_clock_ts_table[tim->pic_struct];
+      for (i = 0; i < NumClockTs; i++) {
+        READ_UINT8 (&reader, tim->clock_timestamp_flag[i], 1);
+        if (tim->clock_timestamp_flag[i]) {
+          if (!gst_h264_parse_clock_timestamp (&tim->clock_timestamp[i], vui,
+                  &reader))
+            goto error;
+        }
+      }
+    }
+  }
+
+  return TRUE;
+
+error:
+  GST_WARNING ("error parsing \"Picture timing\"");
+  return FALSE;
+}
+
 gboolean
 gst_h264_parser_parse_sei_message (GstH264Parser * parser,
-    GstH264SEIMessage * sei, guint8 * data, guint size)
+    GstH264Sequence * seq, GstH264SEIMessage * sei, guint8 * data, guint size)
 {
   GstNalReader reader;
 
@@ -1011,6 +1129,9 @@ gst_h264_parser_parse_sei_message (GstH264Parser * parser,
     res =
         gst_h264_parser_parse_buffering_period (parser,
         &sei->buffering_period, payload_data, payload_size);
+  else if (sei->payloadType == 1)
+    res = gst_h264_parser_parse_pic_timing (parser, seq, &sei->pic_timing,
+        payload_data, payload_size);
   else
     res = TRUE;
 

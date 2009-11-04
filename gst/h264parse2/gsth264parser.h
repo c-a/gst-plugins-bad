@@ -74,6 +74,8 @@ typedef struct _GstH264DecRefPicMarking GstH264DecRefPicMarking;
 typedef struct _GstH264PredWeightTable GstH264PredWeightTable;
 typedef struct _GstH264Slice GstH264Slice;
 
+typedef struct _GstH264ClockTimestamp GstH264ClockTimestamp;
+typedef struct _GstH264PicTiming GstH264PicTiming;
 typedef struct _GstH264BufferingPeriod GstH264BufferingPeriod;
 typedef struct _GstH264SEIMessage GstH264SEIMessage;
 
@@ -318,6 +320,40 @@ struct _GstH264Slice
   guint32 MaxPicNum;
 };
 
+struct _GstH264ClockTimestamp
+{
+  guint8 ct_type;
+  guint8 nuit_field_based_flag;
+  guint8 counting_type;
+  guint8 discontinuity_flag;
+  guint8 cnt_dropped_flag;
+  guint8 n_frames;
+
+  guint8 seconds_flag;
+  guint8 seconds_value;
+
+  guint8 minutes_flag;
+  guint8 minutes_value;
+
+  guint8 hours_flag;
+  guint8 hours_value;
+
+  guint32 time_offset;
+};
+
+struct _GstH264PicTiming
+{
+  guint8 cpb_removal_delay;
+  guint8 dpb_output_delay;
+
+  guint8 pic_struct_present_flag;
+  /* if pic_struct_present_flag */
+  guint8 pic_struct;
+  
+  guint8 clock_timestamp_flag[3];
+  GstH264ClockTimestamp clock_timestamp[3];
+};
+
 struct _GstH264BufferingPeriod
 {
   GstH264Sequence *seq;
@@ -337,6 +373,7 @@ struct _GstH264SEIMessage
 
   union {
     GstH264BufferingPeriod buffering_period;
+    GstH264PicTiming pic_timing;
   };
 };
 
@@ -368,7 +405,7 @@ GType gst_h264_parser_get_type (void) G_GNUC_CONST;
 GstH264Sequence *gst_h264_parser_parse_sequence (GstH264Parser * parser, guint8 * data, guint size);
 GstH264Picture *gst_h264_parser_parse_picture (GstH264Parser * parser, guint8 * data, guint size);
 gboolean gst_h264_parser_parse_slice_header (GstH264Parser * parser, GstH264Slice * slice, guint8 * data, guint size, GstNalUnit nal_unit);
-gboolean gst_h264_parser_parse_sei_message (GstH264Parser * parser, GstH264SEIMessage * sei, guint8 * data, guint size);
+gboolean gst_h264_parser_parse_sei_message (GstH264Parser * parser, GstH264Sequence *seq, GstH264SEIMessage * sei, guint8 * data, guint size);
 
 G_END_DECLS
 
