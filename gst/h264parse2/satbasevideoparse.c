@@ -508,7 +508,7 @@ sat_base_video_parse_push (SatBaseVideoParse * parse, SatVideoFrame * frame)
       GST_PAD_CAPS (SAT_BASE_VIDEO_PARSE_SRC_PAD (parse)));
 
   buf_list = gst_buffer_list_ref (sat_video_frame_get_buffer_list (frame));
-  gst_mini_object_unref (GST_MINI_OBJECT_CAST (frame));
+  //gst_mini_object_unref (GST_MINI_OBJECT_CAST (frame));
 
   return gst_pad_push_list (SAT_BASE_VIDEO_PARSE_SRC_PAD (parse), buf_list);
 }

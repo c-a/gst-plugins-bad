@@ -255,6 +255,7 @@ sat_video_frame_apply_metadata (SatVideoFrame * frame)
         gst_buffer_set_caps (buf, frame->caps);
     }
   }
+  gst_buffer_list_iterator_free (it);
 }
 
 GstBufferList *
