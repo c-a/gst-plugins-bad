@@ -169,6 +169,7 @@ sat_base_video_parse_flush (SatBaseVideoParse * parse)
 {
   SatBaseVideoParseClass *klass = SAT_BASE_VIDEO_PARSE_GET_CLASS (parse);
 
+  SAT_BASE_VIDEO_PARSE_FRAME_LOCK (parse);
   if (gst_adapter_available (parse->input_adapter)) {
     sat_video_frame_add_buffer (parse->frame,
         gst_adapter_take_buffer (parse->input_adapter,
@@ -176,7 +177,9 @@ sat_base_video_parse_flush (SatBaseVideoParse * parse)
   }
 
   sat_base_video_parse_finish_frame (parse);
+
   sat_video_frame_set_flag (parse->frame, SAT_VIDEO_FRAME_FLAG_DISCONT);
+  SAT_BASE_VIDEO_PARSE_FRAME_UNLOCK (parse);
 
   parse->have_sync = FALSE;
   parse->next_offset = GST_BUFFER_OFFSET_NONE;
@@ -367,8 +370,11 @@ sat_base_video_parse_finish_frame (SatBaseVideoParse * parse)
 
   parse_class = SAT_BASE_VIDEO_PARSE_GET_CLASS (parse);
 
-  if (sat_video_frame_empty (parse->frame))
+  if (sat_video_frame_empty (parse->frame)) {
+    gst_mini_object_unref (GST_MINI_OBJECT_CAST (parse->frame));
+    parse->frame = sat_video_frame_new ();
     return GST_FLOW_OK;
+  }
 
   sat_base_video_parse_timestamp_frame (parse, parse->frame);
 
@@ -508,7 +514,7 @@ sat_base_video_parse_push (SatBaseVideoParse * parse, SatVideoFrame * frame)
       GST_PAD_CAPS (SAT_BASE_VIDEO_PARSE_SRC_PAD (parse)));
 
   buf_list = gst_buffer_list_ref (sat_video_frame_get_buffer_list (frame));
-  //gst_mini_object_unref (GST_MINI_OBJECT_CAST (frame));
+  gst_mini_object_unref (GST_MINI_OBJECT_CAST (frame));
 
   return gst_pad_push_list (SAT_BASE_VIDEO_PARSE_SRC_PAD (parse), buf_list);
 }
@@ -561,7 +567,9 @@ sat_base_video_parse_start (SatBaseVideoParse * parse)
   parse->pending_segs = NULL;
   gst_segment_init (&parse->state.segment, GST_FORMAT_TIME);
 
+  SAT_BASE_VIDEO_PARSE_FRAME_LOCK (parse);
   parse->frame = sat_video_frame_new ();
+  SAT_BASE_VIDEO_PARSE_FRAME_UNLOCK (parse);
 
   parse->need_newsegment = FALSE;
   parse->seek_timestamp = GST_CLOCK_TIME_NONE;
@@ -582,7 +590,10 @@ sat_base_video_parse_stop (SatBaseVideoParse * parse)
 
   gst_adapter_clear (parse->input_adapter);
 
+  SAT_BASE_VIDEO_PARSE_FRAME_LOCK (parse);
   gst_mini_object_unref (GST_MINI_OBJECT (parse->frame));
+  parse->frame = NULL;
+  SAT_BASE_VIDEO_PARSE_FRAME_UNLOCK (parse);
 
   if (klass->stop)
     res = klass->stop (parse);
@@ -1044,7 +1055,6 @@ sat_base_video_parse_sink_setcaps (GstPad * pad, GstCaps * caps)
 static void
 sat_base_video_parse_base_init (gpointer g_class)
 {
-  g_type_class_ref (SAT_TYPE_VIDEO_FRAME);
 }
 
 static void
@@ -1061,6 +1071,7 @@ sat_base_video_parse_finalize (GObject * object)
     gst_object_unref (parse->index);
   }
 
+  g_mutex_free (parse->frame_lock);
   g_mutex_free (parse->parse_lock);
 
   G_OBJECT_CLASS (parent_class)->finalize (object);
@@ -1125,4 +1136,5 @@ sat_base_video_parse_init (SatBaseVideoParse * parse,
   parse->index = NULL;
 
   parse->parse_lock = g_mutex_new ();
+  parse->frame_lock = g_mutex_new ();
 }

@@ -87,6 +87,22 @@ G_BEGIN_DECLS
  */
 #define SAT_BASE_VIDEO_PARSE_UNLOCK(obj) g_mutex_unlock (((SatBaseVideoParse *) (obj))->parse_lock)
 
+/**
+ * SAT_BASE_VIDEO_PARSE_FRAME_LOCK
+ * @obj base video parse instance 
+ *
+ * Obtain a lock to protect the frame from concurrent access.
+ */
+#define SAT_BASE_VIDEO_PARSE_FRAME_LOCK(obj) g_mutex_lock (((SatBaseVideoParse *) (obj))->frame_lock)
+
+/**
+ * SAT_BASE_VIDEO_PARSE_FRAME_UNLOCK
+ * @obj base video parse instance 
+ *
+ * Release the lock that protects the frame from concurrent access.
+ */
+#define SAT_BASE_VIDEO_PARSE_FRAME_UNLOCK(obj) g_mutex_unlock (((SatBaseVideoParse *) (obj))->frame_lock)
+
 typedef enum _SatBaseVideoParseScanResult SatBaseVideoParseScanResult;
 
 enum _SatBaseVideoParseScanResult
@@ -124,6 +140,7 @@ struct _SatBaseVideoParse
   gboolean have_sync;
 
   SatVideoFrame *frame;
+  GMutex *frame_lock;
   gint distance_from_sync;
 
   guint64 next_offset;

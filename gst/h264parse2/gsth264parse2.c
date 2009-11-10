@@ -278,16 +278,21 @@ gst_h264_parse2_scan_for_packet_end (SatBaseVideoParse * parse,
 static GstFlowReturn
 gst_h264_parse2_frame_finish (GstH264Parse2 * h264parse)
 {
+  GstFlowReturn ret;
+
+  SAT_BASE_VIDEO_PARSE_FRAME_LOCK (SAT_BASE_VIDEO_PARSE (h264parse));
   h264parse->got_primary_coded_picture = FALSE;
 
-  return sat_base_video_parse_finish_frame (SAT_BASE_VIDEO_PARSE (h264parse));
+  ret = sat_base_video_parse_finish_frame (SAT_BASE_VIDEO_PARSE (h264parse));
+  SAT_BASE_VIDEO_PARSE_FRAME_UNLOCK (SAT_BASE_VIDEO_PARSE (h264parse));
+
+  return ret;
 }
 
 static GstFlowReturn
 gst_h264_parse2_parse_data (SatBaseVideoParse * parse, GstBuffer * buffer)
 {
   GstH264Parse2 *h264parse = GST_H264_PARSE2 (parse);
-  SatVideoFrame *frame;
   GstBitReader reader;
   GstNalUnit nal_unit;
   guint8 forbidden_zero_bit;
@@ -296,9 +301,9 @@ gst_h264_parse2_parse_data (SatBaseVideoParse * parse, GstBuffer * buffer)
   guint size;
   gint i;
 
-  GST_MEMDUMP ("data", GST_BUFFER_DATA (buffer), GST_BUFFER_SIZE (buffer));
+  SatVideoFrame *frame;
 
-  frame = sat_base_video_parse_get_current_frame (parse);
+  GST_MEMDUMP ("data", GST_BUFFER_DATA (buffer), GST_BUFFER_SIZE (buffer));
 
   gst_bit_reader_init_from_buffer (&reader, buffer);
 
@@ -390,8 +395,12 @@ gst_h264_parse2_parse_data (SatBaseVideoParse * parse, GstBuffer * buffer)
 
       if (!h264parse->got_primary_coded_picture) {
         if (GST_H264_IS_I_SLICE (slice.type)
-            || GST_H264_IS_SI_SLICE (slice.type))
+            || GST_H264_IS_SI_SLICE (slice.type)) {
+          SAT_BASE_VIDEO_PARSE_FRAME_LOCK (parse);
+          frame = sat_base_video_parse_get_current_frame (parse);
           sat_video_frame_set_flag (frame, SAT_VIDEO_FRAME_FLAG_KEYFRAME);
+          SAT_BASE_VIDEO_PARSE_FRAME_UNLOCK (parse);
+        }
 
         h264parse->slice = slice;
         h264parse->got_primary_coded_picture = TRUE;
@@ -423,7 +432,11 @@ gst_h264_parse2_parse_data (SatBaseVideoParse * parse, GstBuffer * buffer)
       goto invalid_packet;
   }
 
+  SAT_BASE_VIDEO_PARSE_FRAME_LOCK (parse);
+  frame = sat_base_video_parse_get_current_frame (parse);
+  sat_video_frame_set_flag (frame, SAT_VIDEO_FRAME_FLAG_KEYFRAME);
   sat_video_frame_add_buffer (frame, buffer);
+  SAT_BASE_VIDEO_PARSE_FRAME_UNLOCK (parse);
 
   return GST_FLOW_OK;
 
