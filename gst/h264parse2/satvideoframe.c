@@ -38,7 +38,6 @@ struct _SatVideoFrame
   GstBufferListIterator *it;
 
   GstCaps *caps;
-  guint flags;
 
   GstClockTime upstream_timestamp;
   GstClockTime upstream_duration;
@@ -62,7 +61,7 @@ sat_video_frame_unset_flag (SatVideoFrame * frame, SatVideoFrameFlag flag)
 {
   g_return_if_fail (SAT_IS_VIDEO_FRAME (frame));
 
-  frame->flags &= ~flag;
+  GST_MINI_OBJECT_FLAG_UNSET (frame, flag);
 }
 
 void
@@ -70,7 +69,7 @@ sat_video_frame_set_flag (SatVideoFrame * frame, SatVideoFrameFlag flag)
 {
   g_return_if_fail (SAT_IS_VIDEO_FRAME (frame));
 
-  frame->flags |= flag;
+  GST_MINI_OBJECT_FLAG_SET (frame, flag);
 }
 
 gboolean
@@ -78,7 +77,7 @@ sat_video_frame_flag_is_set (SatVideoFrame * frame, SatVideoFrameFlag flag)
 {
   g_return_val_if_fail (SAT_IS_VIDEO_FRAME (frame), FALSE);
 
-  return frame->flags & flag;
+  return GST_MINI_OBJECT_FLAG_IS_SET (frame, flag);
 }
 
 void
@@ -301,8 +300,6 @@ sat_video_frame_init (SatVideoFrame * frame, gpointer g_class)
   frame->buffer_list = gst_buffer_list_new ();
   frame->it = NULL;
   frame->caps = NULL;
-
-  frame->flags = 0x00;
 
   frame->upstream_timestamp = GST_CLOCK_TIME_NONE;
   frame->upstream_duration = GST_CLOCK_TIME_NONE;
