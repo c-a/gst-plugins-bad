@@ -4,6 +4,7 @@ plugin_LTLIBRARIES = libgsth264parse2.la
 
 libgsth264parse2_la_SOURCES = \
 	gsth264parse2.c \
+	satvideoframe.c \
 	satbasevideoparse.c \
 	gsth264parser.c
 
@@ -33,5 +34,6 @@ nalreadertest_LDADD = $(GST_LIBS) $(GST_CHECK_LIBS) $(CHECK_LIBS) \
 
 noinst_HEADERS = \
 	gsth264parse2.h \
+	satvideoframe.h \
 	satbasevideoparse.h \
   gsth264parser.h

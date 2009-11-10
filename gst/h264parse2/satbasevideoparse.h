@@ -25,6 +25,8 @@
 
 #include <gst/video/gstbasevideoutils.h>
 
+#include "satvideoframe.h"
+
 G_BEGIN_DECLS
 
 #define GST_TYPE_BASE_VIDEO_PARSE           (sat_base_video_parse_get_type())
@@ -96,29 +98,6 @@ enum _SatBaseVideoParseScanResult
 
 typedef struct _SatBaseVideoParseFrame SatBaseVideoParseFrame;
 
-struct _SatBaseVideoParseFrame
-{
-  GstClockTime upstream_timestamp;
-  guint64 byte_offset;
-  
-  GstClockTime decode_timestamp;
-  
-  GstClockTime presentation_timestamp;
-  GstClockTime presentation_duration;
-  gint presentation_frame_number;
-  
-  gint system_frame_number;
-  gint decode_frame_number;
-  
-  gint distance_from_sync;
-  gboolean is_sync_point;
-  gboolean is_eos;
-  gboolean is_keyframe;
-  gboolean is_discont;
-
-  GstBufferList *buffer_list;
-};
-
 typedef struct _SatBaseVideoParse SatBaseVideoParse;
 typedef struct _SatBaseVideoParseClass SatBaseVideoParseClass;
 
@@ -144,14 +123,9 @@ struct _SatBaseVideoParse
 
   gboolean have_sync;
 
-  SatBaseVideoParseFrame *current_frame;
+  SatVideoFrame *frame;
   gint distance_from_sync;
 
-  GstBufferList *buffer_list;
-  GstBufferListIterator *buffer_list_iterator;
-
-  guint64 presentation_timestamp;
-  guint64 system_frame_number;
   guint64 next_offset;
 
   GstClockTime upstream_timestamp;
@@ -220,7 +194,7 @@ struct _SatBaseVideoParseClass
                                         GstBuffer *buffer);
 
   GstFlowReturn (*shape_output)        (SatBaseVideoParse *parse,
-                                        SatBaseVideoParseFrame *frame);
+                                        SatVideoFrame *frame);
 
   gboolean      (*set_sink_caps)       (SatBaseVideoParse *parse,
                                         GstCaps *caps);
@@ -241,30 +215,21 @@ struct _SatBaseVideoParseClass
 
 GType sat_base_video_parse_get_type (void);
 
-GstVideoState  sat_base_video_parse_get_state           (SatBaseVideoParse *parse);
-void           sat_base_video_parse_set_state           (SatBaseVideoParse *parse,
-                                                         GstVideoState state);
+GstVideoState  sat_base_video_parse_get_state         (SatBaseVideoParse *parse);
+void           sat_base_video_parse_set_state         (SatBaseVideoParse *parse,
+                                                       GstVideoState state);
 
-void           sat_base_video_parse_set_duration        (SatBaseVideoParse *parse, 
-                                                         GstFormat format,
-                                                         gint64 duration);
+void           sat_base_video_parse_set_duration      (SatBaseVideoParse *parse, 
+                                                       GstFormat format,
+                                                       gint64 duration);
 
-void           sat_base_video_parse_lost_sync           (SatBaseVideoParse *parse);
+void           sat_base_video_parse_lost_sync         (SatBaseVideoParse *parse);
 
-void           sat_base_video_parse_frame_add           (SatBaseVideoParse *parse,
-                                                         GstBuffer *buffer);
-GstFlowReturn  sat_base_video_parse_frame_finish        (SatBaseVideoParse *parse);
-void           sat_base_video_parse_frame_set_timestamp (SatBaseVideoParse *parse,
-                                                         GstClockTime timestamp);
-void           sat_base_video_parse_frame_set_frame_nr  (SatBaseVideoParse *parse,
-                                                         guint64 frame_number);
-void           sat_base_video_parse_frame_set_duration  (SatBaseVideoParse *parse,
-                                                         GstClockTime duration);
-void           sat_base_video_parse_frame_set_keyframe  (SatBaseVideoParse *parse);
+SatVideoFrame *sat_base_video_parse_get_current_frame (SatBaseVideoParse *parse);
+GstFlowReturn  sat_base_video_parse_finish_frame      (SatBaseVideoParse *parse);
 
-void           sat_base_video_parse_set_sync_point      (SatBaseVideoParse *parse);
-GstFlowReturn  sat_base_video_parse_push                (SatBaseVideoParse *parse,
-                                                         GstBufferList *buffer_list);
+GstFlowReturn  sat_base_video_parse_push              (SatBaseVideoParse *parse,
+                                                       SatVideoFrame *frame);
 
 G_END_DECLS
 

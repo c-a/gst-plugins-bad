@@ -174,7 +174,7 @@ struct _GstH264Sequence
   guint8 delta_pic_order_always_zero_flag;
   gint32 offset_for_non_ref_pic;
   gint32 offset_for_top_to_bottom_field;
-  guint32 num_ref_frames_in_pic_order_cnt_cycle;
+  guint8 num_ref_frames_in_pic_order_cnt_cycle;
   gint32 offset_for_ref_frame[255];
 
   guint32 num_ref_frames;

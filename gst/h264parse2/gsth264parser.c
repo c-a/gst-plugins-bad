@@ -428,7 +428,8 @@ gst_h264_parser_parse_sequence (GstH264Parser * parser, guint8 * data,
     READ_UINT8 (&reader, seq->delta_pic_order_always_zero_flag, 1);
     READ_SE (&reader, seq->offset_for_non_ref_pic);
     READ_SE (&reader, seq->offset_for_top_to_bottom_field);
-    READ_UE (&reader, seq->num_ref_frames_in_pic_order_cnt_cycle);
+    READ_UE_ALLOWED (&reader, seq->num_ref_frames_in_pic_order_cnt_cycle, 0,
+        255);
     for (i = 0; i < seq->num_ref_frames_in_pic_order_cnt_cycle; i++)
       READ_SE (&reader, seq->offset_for_ref_frame[i]);
   }

@@ -280,13 +280,14 @@ gst_h264_parse2_frame_finish (GstH264Parse2 * h264parse)
 {
   h264parse->got_primary_coded_picture = FALSE;
 
-  return sat_base_video_parse_frame_finish (SAT_BASE_VIDEO_PARSE (h264parse));
+  return sat_base_video_parse_finish_frame (SAT_BASE_VIDEO_PARSE (h264parse));
 }
 
 static GstFlowReturn
 gst_h264_parse2_parse_data (SatBaseVideoParse * parse, GstBuffer * buffer)
 {
   GstH264Parse2 *h264parse = GST_H264_PARSE2 (parse);
+  SatVideoFrame *frame;
   GstBitReader reader;
   GstNalUnit nal_unit;
   guint8 forbidden_zero_bit;
@@ -296,6 +297,8 @@ gst_h264_parse2_parse_data (SatBaseVideoParse * parse, GstBuffer * buffer)
   gint i;
 
   GST_MEMDUMP ("data", GST_BUFFER_DATA (buffer), GST_BUFFER_SIZE (buffer));
+
+  frame = sat_base_video_parse_get_current_frame (parse);
 
   gst_bit_reader_init_from_buffer (&reader, buffer);
 
@@ -388,7 +391,7 @@ gst_h264_parse2_parse_data (SatBaseVideoParse * parse, GstBuffer * buffer)
       if (!h264parse->got_primary_coded_picture) {
         if (GST_H264_IS_I_SLICE (slice.type)
             || GST_H264_IS_SI_SLICE (slice.type))
-          sat_base_video_parse_frame_set_keyframe (parse);
+          sat_video_frame_set_flag (frame, SAT_VIDEO_FRAME_FLAG_KEYFRAME);
 
         h264parse->slice = slice;
         h264parse->got_primary_coded_picture = TRUE;
@@ -406,38 +409,55 @@ gst_h264_parse2_parse_data (SatBaseVideoParse * parse, GstBuffer * buffer)
       goto invalid_packet;
   }
 
-  sat_base_video_parse_frame_add (parse, buffer);
+  if (nal_unit.type == GST_NAL_SEI) {
+    GstH264Sequence *seq;
+    GstH264SEIMessage sei;
+
+    if (h264parse->got_primary_coded_picture)
+      seq = h264parse->slice.picture->sequence;
+    else
+      seq = NULL;
+
+    if (!gst_h264_parser_parse_sei_message (h264parse->parser, seq, &sei, data,
+            size))
+      goto invalid_packet;
+  }
+
+  sat_video_frame_add_buffer (frame, buffer);
 
   return GST_FLOW_OK;
 
 invalid_packet:
   GST_WARNING ("Invalid packet size!");
+  gst_buffer_unref (buffer);
 
   return GST_FLOW_OK;
 }
 
 static GstFlowReturn
-gst_h264_parse2_shape_output (SatBaseVideoParse * parse,
-    SatBaseVideoParseFrame * frame)
+gst_h264_parse2_shape_output (SatBaseVideoParse * parse, SatVideoFrame * frame)
 {
   GstH264Parse2 *h264parse = GST_H264_PARSE2 (parse);
-  GstBuffer *buf;
+  GstClockTime timestamp;
+  guint64 byte_offset;
 
-  buf = gst_buffer_list_get (frame->buffer_list, 0, 0);
+  timestamp = sat_video_frame_get_timestamp (frame);
 
-  if (frame->is_eos && GST_BUFFER_TIMESTAMP_IS_VALID (buf)) {
-    h264parse->final_duration = GST_BUFFER_TIMESTAMP (buf);
+  if (sat_video_frame_flag_is_set (frame, SAT_VIDEO_FRAME_FLAG_EOS),
+      GST_CLOCK_TIME_IS_VALID (timestamp)) {
+    h264parse->final_duration = timestamp;
     sat_base_video_parse_set_duration (parse, GST_FORMAT_TIME,
         h264parse->final_duration);
   }
 
-  if (GST_BUFFER_TIMESTAMP_IS_VALID (buf) &&
-      frame->byte_offset != GST_BUFFER_OFFSET_NONE &&
-      frame->byte_offset > h264parse->byte_offset) {
-    h264parse->byte_offset = frame->byte_offset;
+  byte_offset = sat_video_frame_get_upstream_offset (frame);
+
+  if (GST_CLOCK_TIME_IS_VALID (timestamp) &&
+      byte_offset != GST_BUFFER_OFFSET_NONE &&
+      byte_offset > h264parse->byte_offset) {
+    h264parse->byte_offset = byte_offset;
     h264parse->byterate =
-        gst_util_uint64_scale (GST_SECOND, h264parse->byte_offset,
-        GST_BUFFER_TIMESTAMP (buf));
+        gst_util_uint64_scale (GST_SECOND, h264parse->byte_offset, timestamp);
 
     if (!GST_CLOCK_TIME_IS_VALID (h264parse->final_duration)) {
       GstFormat format;
@@ -456,7 +476,7 @@ gst_h264_parse2_shape_output (SatBaseVideoParse * parse,
     }
   }
 
-  return sat_base_video_parse_push (parse, frame->buffer_list);
+  return sat_base_video_parse_push (parse, frame);
 }
 
 static gboolean
