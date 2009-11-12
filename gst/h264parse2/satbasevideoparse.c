@@ -903,15 +903,12 @@ newseg_wrong_rate:
 }
 
 static GstFlowReturn
-sat_base_video_parse_drain (SatBaseVideoParse * parse, gboolean at_eos)
+sat_base_video_parse_drain (SatBaseVideoParse * parse)
 {
   SatBaseVideoParseClass *klass;
   SatBaseVideoParseScanResult res;
   GstFlowReturn ret;
   guint size;
-
-  GstClockTime timestamp, duration;
-  guint64 offset;
 
   klass = SAT_BASE_VIDEO_PARSE_GET_CLASS (parse);
 
@@ -939,6 +936,10 @@ lost_sync:
 
   res = klass->scan_for_packet_end (parse, parse->input_adapter, &size);
   while (res == SAT_BASE_VIDEO_PARSE_SCAN_RESULT_OK) {
+    GstClockTime timestamp, duration;
+    guint64 offset;
+    gboolean preroll, gap;
+
     GstBuffer *buf;
 
     GST_DEBUG ("Packet size: %u", size);
@@ -949,10 +950,25 @@ lost_sync:
     duration = GST_BUFFER_DURATION (parse->input_adapter->buflist->data);
     offset = GST_BUFFER_OFFSET (parse->input_adapter->buflist->data);
 
+    preroll = GST_BUFFER_FLAG_IS_SET (parse->input_adapter->buflist->data,
+        GST_BUFFER_FLAG_PREROLL);
+    gap = GST_BUFFER_FLAG_IS_SET (parse->input_adapter->buflist->data,
+        GST_BUFFER_FLAG_GAP);
+
     buf = gst_adapter_take_buffer (parse->input_adapter, size);
     GST_BUFFER_TIMESTAMP (buf) = timestamp;
     GST_BUFFER_DURATION (buf) = duration;
     GST_BUFFER_OFFSET (buf) = offset;
+
+    if (preroll)
+      GST_BUFFER_FLAG_SET (buf, GST_BUFFER_FLAG_PREROLL);
+    else
+      GST_BUFFER_FLAG_UNSET (buf, GST_BUFFER_FLAG_PREROLL);
+
+    if (gap)
+      GST_BUFFER_FLAG_SET (buf, GST_BUFFER_FLAG_GAP);
+    else
+      GST_BUFFER_FLAG_UNSET (buf, GST_BUFFER_FLAG_GAP);
 
     ret = klass->parse_data (parse, buf);
     if (ret != GST_FLOW_OK)
@@ -964,16 +980,8 @@ lost_sync:
   if (res == SAT_BASE_VIDEO_PARSE_SCAN_RESULT_LOST_SYNC) {
     parse->have_sync = FALSE;
     goto lost_sync;
-  } else if (res == SAT_BASE_VIDEO_PARSE_SCAN_RESULT_NEED_DATA) {
-    if (at_eos) {
-      GstBuffer *buf;
-
-      buf = gst_adapter_take_buffer (parse->input_adapter,
-          gst_adapter_available (parse->input_adapter));
-      ret = klass->parse_data (parse, buf);
-    } else
-      return GST_FLOW_OK;
-  }
+  } else if (res == SAT_BASE_VIDEO_PARSE_SCAN_RESULT_NEED_DATA)
+    return GST_FLOW_OK;
 
   return ret;
 }
@@ -1015,7 +1023,7 @@ sat_base_video_parse_chain (GstPad * pad, GstBuffer * buf)
       GST_TIME_ARGS (GST_BUFFER_TIMESTAMP (buf)));
   gst_adapter_push (parse->input_adapter, buf);
 
-  return sat_base_video_parse_drain (parse, FALSE);
+  return sat_base_video_parse_drain (parse);
 }
 
 static gboolean

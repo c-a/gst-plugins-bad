@@ -113,6 +113,12 @@ sat_video_frame_add_buffer (SatVideoFrame * frame, GstBuffer * buf)
     frame->upstream_timestamp = GST_BUFFER_TIMESTAMP (buf);
     frame->upstream_duration = GST_BUFFER_DURATION (buf);
     frame->upstream_offset = GST_BUFFER_OFFSET (buf);
+
+    if (GST_BUFFER_FLAG_IS_SET (buf, GST_BUFFER_FLAG_PREROLL))
+      sat_video_frame_set_flag (frame, SAT_VIDEO_FRAME_FLAG_PREROLL);
+
+    if (GST_BUFFER_FLAG_IS_SET (buf, GST_BUFFER_FLAG_GAP))
+      sat_video_frame_set_flag (frame, SAT_VIDEO_FRAME_FLAG_GAP);
   }
 
   gst_buffer_list_iterator_add (frame->it, buf);
