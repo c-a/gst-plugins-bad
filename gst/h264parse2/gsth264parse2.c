@@ -52,6 +52,8 @@ GST_BOILERPLATE_FULL (GstH264Parse2, gst_h264_parse2, SatBaseVideoParse,
 
 #define SYNC_CODE_SIZE 3
 
+#define GST_H264_GOT_PRIMARY SAT_VIDEO_FRAME_FLAG_USER1
+
 #define READ_UINT8(reader, val, nbits) { \
   if (!gst_bit_reader_get_bits_uint8 (reader, &val, nbits)) { \
     GST_WARNING ("failed to read uint8, nbits: %d", nbits); \
@@ -276,15 +278,13 @@ gst_h264_parse2_scan_for_packet_end (SatBaseVideoParse * parse,
 }
 
 static GstFlowReturn
-gst_h264_parse2_frame_finish (GstH264Parse2 * h264parse)
+gst_h264_parse2_finish_frame (SatBaseVideoParse * parse,
+    SatVideoFrame ** new_frame)
 {
   GstFlowReturn ret;
 
-  SAT_BASE_VIDEO_PARSE_FRAME_LOCK (SAT_BASE_VIDEO_PARSE (h264parse));
-  h264parse->got_primary_coded_picture = FALSE;
-
-  ret = sat_base_video_parse_finish_frame (SAT_BASE_VIDEO_PARSE (h264parse));
-  SAT_BASE_VIDEO_PARSE_FRAME_UNLOCK (SAT_BASE_VIDEO_PARSE (h264parse));
+  ret = sat_base_video_parse_finish_frame (parse);
+  *new_frame = sat_base_video_parse_get_current_frame (parse);
 
   return ret;
 }
@@ -340,15 +340,18 @@ gst_h264_parse2_parse_data (SatBaseVideoParse * parse, GstBuffer * buffer)
     i--;
   }
 
+  SAT_BASE_VIDEO_PARSE_FRAME_LOCK (parse);
+  frame = sat_base_video_parse_get_current_frame (parse);
+
   /* does this mark the beginning of a new access unit */
   if (nal_unit.type == GST_NAL_AU_DELIMITER)
-    gst_h264_parse2_frame_finish (h264parse);
+    gst_h264_parse2_finish_frame (parse, &frame);
 
-  if (h264parse->got_primary_coded_picture) {
+  if (sat_video_frame_flag_is_set (frame, GST_H264_GOT_PRIMARY)) {
     if (nal_unit.type == GST_NAL_SPS || nal_unit.type == GST_NAL_PPS ||
         nal_unit.type == GST_NAL_SEI ||
         (nal_unit.type >= 14 && nal_unit.type <= 18))
-      gst_h264_parse2_frame_finish (h264parse);
+      gst_h264_parse2_finish_frame (parse, &frame);
   }
 
   if (nal_unit.type >= GST_NAL_SLICE && nal_unit.type <= GST_NAL_SLICE_IDR) {
@@ -359,7 +362,7 @@ gst_h264_parse2_parse_data (SatBaseVideoParse * parse, GstBuffer * buffer)
       goto invalid_packet;
 
     if (slice.redundant_pic_cnt == 0) {
-      if (h264parse->got_primary_coded_picture) {
+      if (sat_video_frame_flag_is_set (frame, GST_H264_GOT_PRIMARY)) {
         GstH264Slice *p_slice;
         guint8 pic_order_cnt_type, p_pic_order_cnt_type;
 
@@ -368,42 +371,38 @@ gst_h264_parse2_parse_data (SatBaseVideoParse * parse, GstBuffer * buffer)
         p_pic_order_cnt_type = p_slice->picture->sequence->pic_order_cnt_type;
 
         if (slice.frame_num != p_slice->frame_num)
-          gst_h264_parse2_frame_finish (h264parse);
+          gst_h264_parse2_finish_frame (parse, &frame);
 
         else if (slice.picture != p_slice->picture)
-          gst_h264_parse2_frame_finish (h264parse);
+          gst_h264_parse2_finish_frame (parse, &frame);
 
         else if (slice.bottom_field_flag != p_slice->bottom_field_flag)
-          gst_h264_parse2_frame_finish (h264parse);
+          gst_h264_parse2_finish_frame (parse, &frame);
 
         else if (nal_unit.ref_idc != p_slice->nal_unit.ref_idc &&
             (nal_unit.ref_idc == 0 || p_slice->nal_unit.ref_idc == 0))
-          gst_h264_parse2_frame_finish (h264parse);
+          gst_h264_parse2_finish_frame (parse, &frame);
 
         else if ((pic_order_cnt_type == 0 && p_pic_order_cnt_type == 0) &&
             (slice.pic_order_cnt_lsb != p_slice->pic_order_cnt_lsb ||
                 slice.delta_pic_order_cnt_bottom !=
                 p_slice->delta_pic_order_cnt_bottom))
-          gst_h264_parse2_frame_finish (h264parse);
+          gst_h264_parse2_finish_frame (parse, &frame);
 
         else if ((p_pic_order_cnt_type == 1 && p_pic_order_cnt_type == 1) &&
             (slice.delta_pic_order_cnt[0] != p_slice->delta_pic_order_cnt[0] ||
                 slice.delta_pic_order_cnt[1] !=
                 p_slice->delta_pic_order_cnt[1]))
-          gst_h264_parse2_frame_finish (h264parse);
+          gst_h264_parse2_finish_frame (parse, &frame);
       }
 
-      if (!h264parse->got_primary_coded_picture) {
+      if (!sat_video_frame_flag_is_set (frame, GST_H264_GOT_PRIMARY)) {
         if (GST_H264_IS_I_SLICE (slice.type)
-            || GST_H264_IS_SI_SLICE (slice.type)) {
-          SAT_BASE_VIDEO_PARSE_FRAME_LOCK (parse);
-          frame = sat_base_video_parse_get_current_frame (parse);
+            || GST_H264_IS_SI_SLICE (slice.type))
           sat_video_frame_set_flag (frame, SAT_VIDEO_FRAME_FLAG_KEYFRAME);
-          SAT_BASE_VIDEO_PARSE_FRAME_UNLOCK (parse);
-        }
 
         h264parse->slice = slice;
-        h264parse->got_primary_coded_picture = TRUE;
+        sat_video_frame_set_flag (frame, GST_H264_GOT_PRIMARY);
       }
     }
   }
@@ -422,7 +421,7 @@ gst_h264_parse2_parse_data (SatBaseVideoParse * parse, GstBuffer * buffer)
     GstH264Sequence *seq;
     GstH264SEIMessage sei;
 
-    if (h264parse->got_primary_coded_picture)
+    if (sat_video_frame_flag_is_set (frame, GST_H264_GOT_PRIMARY))
       seq = h264parse->slice.picture->sequence;
     else
       seq = NULL;
@@ -432,15 +431,13 @@ gst_h264_parse2_parse_data (SatBaseVideoParse * parse, GstBuffer * buffer)
       goto invalid_packet;
   }
 
-  SAT_BASE_VIDEO_PARSE_FRAME_LOCK (parse);
-  frame = sat_base_video_parse_get_current_frame (parse);
-  sat_video_frame_set_flag (frame, SAT_VIDEO_FRAME_FLAG_KEYFRAME);
   sat_video_frame_add_buffer (frame, buffer);
   SAT_BASE_VIDEO_PARSE_FRAME_UNLOCK (parse);
 
   return GST_FLOW_OK;
 
 invalid_packet:
+  SAT_BASE_VIDEO_PARSE_FRAME_UNLOCK (parse);
   GST_WARNING ("Invalid packet size!");
   gst_buffer_unref (buffer);
 
@@ -502,8 +499,6 @@ gst_h264_parse2_start (SatBaseVideoParse * parse)
   h264parse->nal_length_size = SYNC_CODE_SIZE;
   h264parse->parser = g_object_new (GST_TYPE_H264_PARSER, NULL);
 
-  h264parse->got_primary_coded_picture = FALSE;
-
   h264parse->byterate = -1;
   h264parse->byte_offset = 0;
 
@@ -520,14 +515,6 @@ gst_h264_parse2_stop (SatBaseVideoParse * parse)
   g_object_unref (h264parse->parser);
 
   return TRUE;
-}
-
-static void
-gst_h264_parse2_flush (SatBaseVideoParse * parse)
-{
-  GstH264Parse2 *h264parse = GST_H264_PARSE2 (parse);
-
-  h264parse->got_primary_coded_picture = FALSE;
 }
 
 static void
@@ -566,7 +553,6 @@ gst_h264_parse2_class_init (GstH264Parse2Class * klass)
 
   baseparse_class->start = GST_DEBUG_FUNCPTR (gst_h264_parse2_start);
   baseparse_class->stop = GST_DEBUG_FUNCPTR (gst_h264_parse2_stop);
-  baseparse_class->flush = GST_DEBUG_FUNCPTR (gst_h264_parse2_flush);
 
   baseparse_class->scan_for_sync =
       GST_DEBUG_FUNCPTR (gst_h264_parse2_scan_for_sync);

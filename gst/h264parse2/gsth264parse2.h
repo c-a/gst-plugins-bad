@@ -49,7 +49,6 @@ struct _GstH264Parse2 {
   guint8 nal_length_size;
   GstH264Parser *parser;
 
-  gboolean got_primary_coded_picture;
   GstH264Slice slice;
   
   guint64 byte_offset;
