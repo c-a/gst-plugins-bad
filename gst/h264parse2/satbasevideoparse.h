@@ -243,7 +243,8 @@ void           sat_base_video_parse_set_duration      (SatBaseVideoParse *parse,
 void           sat_base_video_parse_lost_sync         (SatBaseVideoParse *parse);
 
 SatVideoFrame *sat_base_video_parse_get_current_frame (SatBaseVideoParse *parse);
-GstFlowReturn  sat_base_video_parse_finish_frame      (SatBaseVideoParse *parse);
+GstFlowReturn  sat_base_video_parse_finish_frame      (SatBaseVideoParse *parse,
+                                                       SatVideoFrame **frame);
 
 GstFlowReturn  sat_base_video_parse_push              (SatBaseVideoParse *parse,
                                                        SatVideoFrame *frame);

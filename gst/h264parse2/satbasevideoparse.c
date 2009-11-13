@@ -176,7 +176,7 @@ sat_base_video_parse_flush (SatBaseVideoParse * parse)
             gst_adapter_available (parse->input_adapter)));
   }
 
-  sat_base_video_parse_finish_frame (parse);
+  sat_base_video_parse_finish_frame (parse, NULL);
 
   sat_video_frame_set_flag (parse->frame, SAT_VIDEO_FRAME_FLAG_DISCONT);
   SAT_BASE_VIDEO_PARSE_FRAME_UNLOCK (parse);
@@ -359,7 +359,8 @@ sat_base_video_parse_timestamp_frame (SatBaseVideoParse * parse,
 }
 
 GstFlowReturn
-sat_base_video_parse_finish_frame (SatBaseVideoParse * parse)
+sat_base_video_parse_finish_frame (SatBaseVideoParse * parse,
+    SatVideoFrame ** frame)
 {
   SatBaseVideoParseClass *parse_class;
   GstFlowReturn ret;
@@ -384,6 +385,9 @@ sat_base_video_parse_finish_frame (SatBaseVideoParse * parse)
     ret = sat_base_video_parse_push (parse, parse->frame);
 
   parse->frame = sat_video_frame_new ();
+
+  if (frame)
+    *frame = parse->frame;
 
   return ret;
 }

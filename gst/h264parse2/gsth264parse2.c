@@ -278,18 +278,6 @@ gst_h264_parse2_scan_for_packet_end (SatBaseVideoParse * parse,
 }
 
 static GstFlowReturn
-gst_h264_parse2_finish_frame (SatBaseVideoParse * parse,
-    SatVideoFrame ** new_frame)
-{
-  GstFlowReturn ret;
-
-  ret = sat_base_video_parse_finish_frame (parse);
-  *new_frame = sat_base_video_parse_get_current_frame (parse);
-
-  return ret;
-}
-
-static GstFlowReturn
 gst_h264_parse2_parse_data (SatBaseVideoParse * parse, GstBuffer * buffer)
 {
   GstH264Parse2 *h264parse = GST_H264_PARSE2 (parse);
@@ -345,13 +333,13 @@ gst_h264_parse2_parse_data (SatBaseVideoParse * parse, GstBuffer * buffer)
 
   /* does this mark the beginning of a new access unit */
   if (nal_unit.type == GST_NAL_AU_DELIMITER)
-    gst_h264_parse2_finish_frame (parse, &frame);
+    sat_base_video_parse_finish_frame (parse, &frame);
 
   if (sat_video_frame_flag_is_set (frame, GST_H264_GOT_PRIMARY)) {
     if (nal_unit.type == GST_NAL_SPS || nal_unit.type == GST_NAL_PPS ||
         nal_unit.type == GST_NAL_SEI ||
         (nal_unit.type >= 14 && nal_unit.type <= 18))
-      gst_h264_parse2_finish_frame (parse, &frame);
+      sat_base_video_parse_finish_frame (parse, &frame);
   }
 
   if (nal_unit.type >= GST_NAL_SLICE && nal_unit.type <= GST_NAL_SLICE_IDR) {
@@ -371,29 +359,29 @@ gst_h264_parse2_parse_data (SatBaseVideoParse * parse, GstBuffer * buffer)
         p_pic_order_cnt_type = p_slice->picture->sequence->pic_order_cnt_type;
 
         if (slice.frame_num != p_slice->frame_num)
-          gst_h264_parse2_finish_frame (parse, &frame);
+          sat_base_video_parse_finish_frame (parse, &frame);
 
         else if (slice.picture != p_slice->picture)
-          gst_h264_parse2_finish_frame (parse, &frame);
+          sat_base_video_parse_finish_frame (parse, &frame);
 
         else if (slice.bottom_field_flag != p_slice->bottom_field_flag)
-          gst_h264_parse2_finish_frame (parse, &frame);
+          sat_base_video_parse_finish_frame (parse, &frame);
 
         else if (nal_unit.ref_idc != p_slice->nal_unit.ref_idc &&
             (nal_unit.ref_idc == 0 || p_slice->nal_unit.ref_idc == 0))
-          gst_h264_parse2_finish_frame (parse, &frame);
+          sat_base_video_parse_finish_frame (parse, &frame);
 
         else if ((pic_order_cnt_type == 0 && p_pic_order_cnt_type == 0) &&
             (slice.pic_order_cnt_lsb != p_slice->pic_order_cnt_lsb ||
                 slice.delta_pic_order_cnt_bottom !=
                 p_slice->delta_pic_order_cnt_bottom))
-          gst_h264_parse2_finish_frame (parse, &frame);
+          sat_base_video_parse_finish_frame (parse, &frame);
 
         else if ((p_pic_order_cnt_type == 1 && p_pic_order_cnt_type == 1) &&
             (slice.delta_pic_order_cnt[0] != p_slice->delta_pic_order_cnt[0] ||
                 slice.delta_pic_order_cnt[1] !=
                 p_slice->delta_pic_order_cnt[1]))
-          gst_h264_parse2_finish_frame (parse, &frame);
+          sat_base_video_parse_finish_frame (parse, &frame);
       }
 
       if (!sat_video_frame_flag_is_set (frame, GST_H264_GOT_PRIMARY)) {
