@@ -90,7 +90,7 @@ sat_base_video_parse_update_src_caps (SatBaseVideoParse * parse)
     }
   }
 
-  if (GST_PAD_CAPS (parse->sinkpad) && (!caps))
+  if (!caps && GST_PAD_CAPS (parse->sinkpad))
     caps = gst_caps_copy (GST_PAD_CAPS (parse->sinkpad));
 
   if (!caps)
@@ -514,6 +514,10 @@ sat_base_video_parse_push (SatBaseVideoParse * parse, SatVideoFrame * frame)
       " frame_nr=%" G_GUINT64_FORMAT, GST_TIME_ARGS (timestamp),
       GST_TIME_ARGS (duration), frame_nr);
 
+  if (!GST_PAD_CAPS (SAT_BASE_VIDEO_PARSE_SRC_PAD (parse)))
+    if (!sat_base_video_parse_update_src_caps (parse))
+      goto no_caps;
+
   sat_video_frame_set_caps (frame,
       GST_PAD_CAPS (SAT_BASE_VIDEO_PARSE_SRC_PAD (parse)));
 
@@ -521,6 +525,10 @@ sat_base_video_parse_push (SatBaseVideoParse * parse, SatVideoFrame * frame)
   gst_mini_object_unref (GST_MINI_OBJECT_CAST (frame));
 
   return gst_pad_push_list (SAT_BASE_VIDEO_PARSE_SRC_PAD (parse), buf_list);
+
+no_caps:
+  gst_mini_object_unref (GST_MINI_OBJECT_CAST (frame));
+  return GST_FLOW_ERROR;
 }
 
 /*
@@ -849,7 +857,10 @@ sat_base_video_parse_sink_event (GstPad * pad, GstEvent * event)
     {
       GST_DEBUG ("EOS");
 
+      SAT_BASE_VIDEO_PARSE_FRAME_LOCK (parse);
       sat_video_frame_set_flag (parse->frame, SAT_VIDEO_FRAME_FLAG_EOS);
+      SAT_BASE_VIDEO_PARSE_FRAME_UNLOCK (parse);
+
       sat_base_video_parse_flush (parse);
 
       if (parse->index)
@@ -1054,8 +1065,7 @@ sat_base_video_parse_sink_setcaps (GstPad * pad, GstCaps * caps)
   if (klass->set_sink_caps)
     res = klass->set_sink_caps (parse, caps);
 
-  res = (res && gst_pad_set_caps (pad, caps) &&
-      sat_base_video_parse_update_src_caps (parse));
+  res = res && sat_base_video_parse_update_src_caps (parse);
 
   gst_object_unref (parse);
   return res;
