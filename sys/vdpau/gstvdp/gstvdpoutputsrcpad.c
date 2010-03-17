@@ -18,6 +18,9 @@
  * Boston, MA 02111-1307, USA.
  */
 
+#include <gst/cairo/gstcairo.h>
+#include <cairo/cairo-xlib.h>
+
 #include "gstvdputils.h"
 #include "gstvdpvideobuffer.h"
 #include "gstvdpoutputbufferpool.h"
@@ -38,6 +41,7 @@ typedef enum _GstVdpOutputSrcPadFormat GstVdpOutputSrcPadFormat;
 enum _GstVdpOutputSrcPadFormat
 {
   GST_VDP_OUTPUT_SRC_PAD_FORMAT_RGB,
+  GST_VDP_OUTPUT_SRC_PAD_FORMAT_CAIRO,
   GST_VDP_OUTPUT_SRC_PAD_FORMAT_VDPAU
 };
 
@@ -54,6 +58,11 @@ struct _GstVdpOutputSrcPad
 
   GstVdpBufferPool *bpool;
   gboolean lock_caps;
+  
+  /* cairo output */
+  Visual *visual;
+  Drawable drawable;
+  gint depth;
 
   /* properties */
   GstVdpDevice *device;
@@ -69,6 +78,110 @@ GST_DEBUG_CATEGORY_INIT (gst_vdp_output_src_pad_debug, "vdpoutputsrcpad", 0, "Gs
 
 G_DEFINE_TYPE_WITH_CODE (GstVdpOutputSrcPad, gst_vdp_output_src_pad,
     GST_TYPE_PAD, DEBUG_INIT ());
+
+static GstFlowReturn
+gst_vdp_output_src_pad_download_to_cairo (GstVdpOutputSrcPad * vdp_pad,
+    GstVdpOutputBuffer * output_buf, GstBuffer ** outbuf, GError ** error)
+{
+  GstVdpDevice *device;
+  Pixmap pixmap;
+
+  VdpStatus status;
+  VdpPresentationQueueTarget target;
+  VdpPresentationQueue queue;
+
+  cairo_surface_t *cairo_surface, *output_surface;
+  GstCairoFormat *cairo_format;
+  cairo_t *cr;
+
+  device = vdp_pad->device;
+
+  pixmap = XCreatePixmap (device->display, vdp_pad->drawable,
+      vdp_pad->width, vdp_pad->height, vdp_pad->depth);
+
+  status = device->vdp_presentation_queue_target_create_x11 (device->device,
+      pixmap, &target);
+  if (status != VDP_STATUS_OK)
+    goto presentation_target_error;
+
+  status =
+      device->vdp_presentation_queue_create (device->device, target, &queue);
+  if (status != VDP_STATUS_OK)
+    goto presentation_queue_error;
+
+  status = device->vdp_presentation_queue_display (queue,
+      output_buf->surface, 0, 0, 0);
+  if (status != VDP_STATUS_OK)
+    goto display_error;
+
+  device->vdp_presentation_queue_destroy (queue);
+  device->vdp_presentation_queue_target_destroy (target);
+
+  cairo_surface = cairo_xlib_surface_create (device->display, (Drawable) pixmap,
+      vdp_pad->visual, vdp_pad->width, vdp_pad->height);
+  if (cairo_surface_status (cairo_surface) != CAIRO_STATUS_SUCCESS)
+    goto surface_create_error;
+
+  cairo_format = gst_cairo_format_new (GST_PAD_CAPS (vdp_pad));
+  *outbuf = gst_cairo_buffer_new_similar (cairo_surface, cairo_format);
+
+  output_surface = gst_cairo_create_surface (*outbuf, cairo_format);
+  gst_cairo_format_free (cairo_format);
+
+  cr = cairo_create (output_surface);
+  cairo_set_source_surface (cr, cairo_surface, 0.0, 0.0);
+  cairo_paint (cr);
+  cairo_destroy (cr);
+
+  cairo_surface_destroy (output_surface);
+  cairo_surface_destroy (cairo_surface);
+
+  XFreePixmap (device->display, pixmap);
+
+  return GST_FLOW_OK;
+
+presentation_target_error:
+  XFreePixmap (device->display, pixmap);
+
+  g_set_error (error, GST_RESOURCE_ERROR, GST_RESOURCE_ERROR_OPEN_WRITE,
+      "Could not create presentation target, "
+      "error returned from vdpau was: %s",
+      device->vdp_get_error_string (status));
+  return GST_FLOW_ERROR;
+
+presentation_queue_error:
+  XFreePixmap (device->display, pixmap);
+  device->vdp_presentation_queue_target_destroy (target);
+
+  g_set_error (error, GST_RESOURCE_ERROR, GST_RESOURCE_ERROR_OPEN_WRITE,
+      "Could not create presentation queue, "
+      "error returned from vdpau was: %s",
+      device->vdp_get_error_string (status));
+  return GST_FLOW_ERROR;
+
+display_error:
+  XFreePixmap (device->display, pixmap);
+  device->vdp_presentation_queue_target_destroy (target);
+  device->vdp_presentation_queue_destroy (queue);
+
+  g_set_error (error, GST_RESOURCE_ERROR, GST_RESOURCE_ERROR_WRITE,
+      "Could not display frame, "
+      "error returned from vdpau was: %s",
+      device->vdp_get_error_string (status));
+  return GST_FLOW_ERROR;
+
+surface_create_error:
+  XFreePixmap (device->display, pixmap);
+
+  g_set_error (error, GST_RESOURCE_ERROR, GST_RESOURCE_ERROR_OPEN_WRITE,
+      "Could not create cairo surface, "
+      "error returned from cairo was: %s",
+      cairo_status_to_string (cairo_surface_status (cairo_surface)));
+  cairo_surface_destroy (cairo_surface);
+
+  return GST_FLOW_ERROR;
+
+}
 
 GstFlowReturn
 gst_vdp_output_src_pad_push (GstVdpOutputSrcPad * vdp_pad,
@@ -112,6 +225,18 @@ gst_vdp_output_src_pad_push (GstVdpOutputSrcPad * vdp_pad,
       gst_buffer_copy_metadata (outbuf, (const GstBuffer *) output_buf,
           GST_BUFFER_COPY_FLAGS | GST_BUFFER_COPY_TIMESTAMPS);
       gst_buffer_unref (GST_BUFFER_CAST (output_buf));
+      break;
+    }
+    case GST_VDP_OUTPUT_SRC_PAD_FORMAT_CAIRO:
+    {
+      GstFlowReturn ret;
+
+      ret = gst_vdp_output_src_pad_download_to_cairo (vdp_pad, output_buf,
+          &outbuf, error);
+      gst_buffer_unref (GST_BUFFER_CAST (output_buf));
+      if (ret != GST_FLOW_OK)
+        return ret;
+
       break;
     }
     case GST_VDP_OUTPUT_SRC_PAD_FORMAT_VDPAU:
@@ -190,6 +315,7 @@ gst_vdp_output_src_pad_alloc_buffer (GstVdpOutputSrcPad * vdp_pad,
 
   switch (vdp_pad->output_format) {
     case GST_VDP_OUTPUT_SRC_PAD_FORMAT_RGB:
+    case GST_VDP_OUTPUT_SRC_PAD_FORMAT_CAIRO:
     {
       ret = gst_vdp_output_src_pad_create_buffer (vdp_pad, output_buf, error);
       if (ret != GST_FLOW_OK)
@@ -259,6 +385,9 @@ gst_vdp_output_src_pad_setcaps (GstPad * pad, GstCaps * caps)
     gst_vdp_buffer_pool_set_caps (vdp_pad->bpool, vdp_pad->output_caps);
 
     vdp_pad->output_format = GST_VDP_OUTPUT_SRC_PAD_FORMAT_RGB;
+  } else if (gst_structure_has_name (structure, "video/x-cairo")) {
+    vdp_pad->output_format = GST_VDP_OUTPUT_SRC_PAD_FORMAT_CAIRO;
+    vdp_pad->rgba_format = VDP_RGBA_FORMAT_R10G10B10A2;
   } else if (gst_structure_has_name (structure, "video/x-vdpau-output")) {
     if (!gst_structure_get_int (structure, "rgba-format",
             (gint *) & vdp_pad->rgba_format))
@@ -327,15 +456,27 @@ gst_vdp_output_src_pad_new (GstPadTemplate * templ, const gchar * name)
 }
 
 static void
-gst_vdp_output_src_pad_update_caps (GstVdpOutputSrcPad * vdp_pad)
+gst_vdp_output_src_pad_set_device (GstVdpOutputSrcPad * vdp_pad,
+    GstVdpDevice * device)
 {
+  gint screen_number;
   GstCaps *caps;
   const GstCaps *templ_caps;
 
+  if (vdp_pad->device)
+    g_object_unref (vdp_pad->device);
+  vdp_pad->device = device;
+
+  screen_number = DefaultScreen (device->display);
+  vdp_pad->visual = DefaultVisual (device->display, screen_number);
+  vdp_pad->drawable = (Drawable) DefaultRootWindow (device->display);
+  vdp_pad->depth = DefaultDepth (device->display, screen_number);
+  
+  /* update caps */
   if (vdp_pad->caps)
     gst_caps_unref (vdp_pad->caps);
 
-  caps = gst_vdp_output_buffer_get_allowed_caps (vdp_pad->device);
+  caps = gst_vdp_video_buffer_get_allowed_caps (device);
 
   if ((templ_caps = gst_pad_get_pad_template_caps (GST_PAD (vdp_pad)))) {
     vdp_pad->caps = gst_caps_intersect (caps, templ_caps);
@@ -369,10 +510,7 @@ gst_vdp_output_src_pad_set_property (GObject * object, guint prop_id,
 
   switch (prop_id) {
     case PROP_DEVICE:
-      if (vdp_pad->device)
-        g_object_unref (vdp_pad->device);
-      vdp_pad->device = g_value_dup_object (value);
-      gst_vdp_output_src_pad_update_caps (vdp_pad);
+      gst_vdp_output_src_pad_set_device (vdp_pad, g_value_get_object (value));
       break;
 
     default:

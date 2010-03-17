@@ -224,6 +224,19 @@ fi
 dnl Orc
 ORC_CHECK([0.4.5])
 
+dnl gst-plugins-cairo
+AG_GST_PKG_CHECK_MODULES(GSTCAIRO, gstreamer-cairo-0.10 >= 0.10.1.1,
+  HAVE_GSTCAIRO=yes, HAVE_GSTCAIRO=no)
+AC_SUBST(GSTCAIRO_CFLAGS)
+AC_SUBST(GSTCAIRO_LIBS)
+
+dnl gst-plugins-cairo
+AG_GST_PKG_CHECK_MODULES(CAIROXLIB, cairo-xlib >= 1.8.0,
+  HAVE_CAIROXLIB=yes, HAVE_CAIROXLIB=no)
+AC_SUBST(CAIROXLIB_CFLAGS)
+AC_SUBST(CAIROXLIB_LIBS)
+
+
 dnl set license and copyright notice
 GST_LICENSE="LGPL"
 AC_DEFINE_UNQUOTED(GST_LICENSE, "$GST_LICENSE", [GStreamer license])
@@ -557,6 +570,7 @@ AG_GST_CHECK_FEATURE(BZ2, [bz2 library], bz2, [
 #  AC_SUBST(CAIRO_CFLAGS)
 #  AC_SUBST(CAIRO_LIBS)
 #])
+
 
 dnl *** cdaudio ***
 translit(dnm, m, l) AM_CONDITIONAL(USE_CDAUDIO, true)

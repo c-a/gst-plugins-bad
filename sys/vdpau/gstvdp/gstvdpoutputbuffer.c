@@ -186,7 +186,7 @@ GstVdpOutputBufferFormats rgba_formats[] = {
 GstCaps *
 gst_vdp_output_buffer_get_template_caps (void)
 {
-  GstCaps *caps, *rgb_caps;
+  GstCaps *caps, *rgb_caps, *cairo_caps;
   gint i;
 
   caps = gst_caps_new_empty ();
@@ -210,6 +210,11 @@ gst_vdp_output_buffer_get_template_caps (void)
 
   }
 
+  cairo_caps = gst_caps_new_simple ("video/x-cairo",
+      "width", GST_TYPE_INT_RANGE, 1, 8192,
+      "height", GST_TYPE_INT_RANGE, 1, 8192);
+
+  gst_caps_append (caps, cairo_caps);
   gst_caps_append (caps, rgb_caps);
 
   return caps;
@@ -218,7 +223,7 @@ gst_vdp_output_buffer_get_template_caps (void)
 GstCaps *
 gst_vdp_output_buffer_get_allowed_caps (GstVdpDevice * device)
 {
-  GstCaps *caps, *rgb_caps;
+  GstCaps *caps, *rgb_caps, *cairo_caps;
   gint i;
 
   g_return_val_if_fail (GST_IS_VDP_DEVICE (device), NULL);
@@ -260,6 +265,11 @@ gst_vdp_output_buffer_get_allowed_caps (GstVdpDevice * device)
     }
   }
 
+  cairo_caps = gst_caps_new_simple ("video/x-cairo",
+      "width", GST_TYPE_INT_RANGE, 1, 8192,
+      "height", GST_TYPE_INT_RANGE, 1, 8192);
+
+  gst_caps_append (caps, cairo_caps);
   gst_caps_append (caps, rgb_caps);
 
 error:
