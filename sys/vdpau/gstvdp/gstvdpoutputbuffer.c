@@ -211,6 +211,7 @@ gst_vdp_output_buffer_get_template_caps (void)
   }
 
   cairo_caps = gst_caps_new_simple ("video/x-cairo",
+      "surface-type", G_TYPE_INT, 3,
       "width", GST_TYPE_INT_RANGE, 1, 8192,
       "height", GST_TYPE_INT_RANGE, 1, 8192);
 
@@ -266,6 +267,7 @@ gst_vdp_output_buffer_get_allowed_caps (GstVdpDevice * device)
   }
 
   cairo_caps = gst_caps_new_simple ("video/x-cairo",
+      "surface-type", G_TYPE_INT, 3,
       "width", GST_TYPE_INT_RANGE, 1, 8192,
       "height", GST_TYPE_INT_RANGE, 1, 8192);
 
