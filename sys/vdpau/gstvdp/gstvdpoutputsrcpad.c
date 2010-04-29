@@ -124,6 +124,7 @@ gst_vdp_output_src_pad_download_to_cairo (GstVdpOutputSrcPad * vdp_pad,
 
 presentation_target_error:
   cairo_surface_destroy (output_surface);
+  gst_buffer_unref (*outbuf);
 
   g_set_error (error, GST_RESOURCE_ERROR, GST_RESOURCE_ERROR_OPEN_WRITE,
       "Could not create presentation target, "
@@ -133,6 +134,7 @@ presentation_target_error:
 
 presentation_queue_error:
   cairo_surface_destroy (output_surface);
+  gst_buffer_unref (*outbuf);
   device->vdp_presentation_queue_target_destroy (target);
 
   g_set_error (error, GST_RESOURCE_ERROR, GST_RESOURCE_ERROR_OPEN_WRITE,
@@ -143,6 +145,7 @@ presentation_queue_error:
 
 display_error:
   cairo_surface_destroy (output_surface);
+  gst_buffer_unref (*outbuf);
   device->vdp_presentation_queue_target_destroy (target);
   device->vdp_presentation_queue_destroy (queue);
 
